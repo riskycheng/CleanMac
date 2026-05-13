@@ -321,42 +321,4 @@ struct ProcessingDetailCard: View {
     }
 }
 
-struct WaitingCard: View {
-    let result: ScanModuleResult
-    
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.05))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-            
-            VStack {
-                HStack {
-                    Spacer()
-                    Image(systemName: result.type.icon)
-                        .font(.system(size: 32, weight: .light))
-                        .foregroundStyle(result.type.accent.opacity(0.2))
-                }
-                Spacer()
-            }
-            .padding(16)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Spacer()
-                Text(result.primaryText)
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white.opacity(0.5))
-                    .lineLimit(1)
-                
-                Text("waiting...")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.3))
-                Spacer()
-            }
-            .padding(16)
-        }
-    }
-}
+

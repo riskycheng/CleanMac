@@ -25,6 +25,17 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         }
     }
     
+    var scanModuleType: ScanModuleType? {
+        switch self {
+        case .cleanup: return .cleanup
+        case .protection: return .protection
+        case .performance: return .performance
+        case .applications: return .applications
+        case .myClutter: return .myClutter
+        default: return nil
+        }
+    }
+    
     var gradient: Gradient {
         switch self {
         case .smartCare:
@@ -58,28 +69,20 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .assistant: return Color(hex: "E040FB")
         }
     }
-    
-    var ringColor: Color {
-        switch self {
-        case .smartCare: return .cyan
-        case .cleanup: return .green
-        case .protection: return .pink
-        case .performance: return .orange
-        case .applications: return .blue
-        case .myClutter: return .teal
-        case .spaceLens: return .purple
-        case .assistant: return .cyan
-        }
-    }
 }
 
 struct SidebarView: View {
     @Binding var selection: SidebarItem
+    var completedModules: Set<ScanModuleType> = []
     
     var body: some View {
         VStack(spacing: 4) {
             ForEach(SidebarItem.allCases) { item in
-                SidebarRow(item: item, isSelected: selection == item) {
+                SidebarRow(
+                    item: item,
+                    isSelected: selection == item,
+                    isCompleted: item.scanModuleType.map { completedModules.contains($0) } ?? false
+                ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         selection = item
                     }
@@ -101,15 +104,30 @@ struct SidebarView: View {
 struct SidebarRow: View {
     let item: SidebarItem
     let isSelected: Bool
+    let isCompleted: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: item.icon)
-                    .font(.system(size: 18, weight: .medium))
-                    .frame(width: 24, height: 24)
-                    .foregroundStyle(isSelected ? item.accent : .white.opacity(0.85))
+                ZStack {
+                    Image(systemName: item.icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .frame(width: 24, height: 24)
+                        .foregroundStyle(isSelected ? item.accent : .white.opacity(0.85))
+                    
+                    if isCompleted {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 14, height: 14)
+                            .overlay(
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.white)
+                            )
+                            .offset(x: 10, y: -10)
+                    }
+                }
                 
                 Text(item.rawValue)
                     .font(.system(size: 14, weight: isSelected ? .semibold : .medium))

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SmartCareView: View {
     @State private var viewModel = SmartScanViewModel()
+    @Binding var completedModules: Set<ScanModuleType>
     
     var body: some View {
         ZStack {
@@ -10,6 +11,9 @@ struct SmartCareView: View {
                 idleView
             case .scanning(let moduleIndex, let currentPath):
                 scanningView(moduleIndex: moduleIndex, currentPath: currentPath)
+                    .onAppear {
+                        completedModules = viewModel.completedModules
+                    }
             case .results(let results):
                 resultsView(results: results)
             case .processing(let moduleIndex, let itemIndex):
@@ -17,6 +21,9 @@ struct SmartCareView: View {
             case .complete(let results):
                 completeView(results: results)
             }
+        }
+        .onChange(of: viewModel.completedModules) { _, newValue in
+            completedModules = newValue
         }
     }
     
@@ -68,7 +75,7 @@ struct SmartCareView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Scanning State
+    // MARK: - Scanning State with Dynamic Grid
     func scanningView(moduleIndex: Int, currentPath: String) -> some View {
         VStack(spacing: 0) {
             Text(ScanModuleType.allCases[moduleIndex].scanningTitle)
@@ -77,31 +84,11 @@ struct SmartCareView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
             
-            HStack(spacing: 16) {
-                ActiveScanCard(
-                    type: ScanModuleType.allCases[moduleIndex],
-                    title: ScanModuleType.allCases[moduleIndex].scanningTitle,
-                    subtitle: currentPath
-                )
-                .frame(width: 420)
-                
-                VStack(spacing: 16) {
-                    HStack(spacing: 16) {
-                        ForEach([1, 2].filter { $0 < 5 }, id: \.self) { idx in
-                            placeholderCard(type: ScanModuleType.allCases[idx])
-                        }
-                    }
-                    .frame(height: 200)
-                    
-                    HStack(spacing: 16) {
-                        ForEach([3, 4].filter { $0 < 5 }, id: \.self) { idx in
-                            placeholderCard(type: ScanModuleType.allCases[idx])
-                        }
-                    }
-                    .frame(height: 200)
-                }
-                .frame(maxWidth: .infinity)
-            }
+            DynamicScanningGrid(
+                viewModel: viewModel,
+                activeIndex: moduleIndex,
+                currentPath: currentPath
+            )
             .padding(.horizontal, 32)
             
             Spacer()
@@ -112,28 +99,6 @@ struct SmartCareView: View {
                 action: { viewModel.stop() }
             )
             .padding(.bottom, 40)
-        }
-    }
-    
-    func placeholderCard(type: ScanModuleType) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.white.opacity(0.04))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
-            
-            VStack {
-                HStack {
-                    Spacer()
-                    Image(systemName: type.icon)
-                        .font(.system(size: 32, weight: .light))
-                        .foregroundStyle(type.accent.opacity(0.2))
-                }
-                Spacer()
-            }
-            .padding(16)
         }
     }
     
@@ -179,8 +144,7 @@ struct SmartCareView: View {
     // MARK: - Processing State
     func processingView(moduleIndex: Int, itemIndex: Int) -> some View {
         VStack(spacing: 0) {
-            let allModules = ScanModuleType.allCases
-            let currentType = allModules[moduleIndex]
+            let currentType = ScanModuleType.allCases[moduleIndex]
             Text(currentType.processingTitle)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
@@ -197,14 +161,14 @@ struct SmartCareView: View {
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         ForEach([1, 2].filter { $0 < 5 && $0 != moduleIndex }, id: \.self) { idx in
-                            WaitingCard(result: buildWaitingResult(index: idx))
+                            WaitingCard(type: ScanModuleType.allCases[idx])
                         }
                     }
                     .frame(height: 200)
                     
                     HStack(spacing: 16) {
                         ForEach([3, 4].filter { $0 < 5 && $0 != moduleIndex }, id: \.self) { idx in
-                            WaitingCard(result: buildWaitingResult(index: idx))
+                            WaitingCard(type: ScanModuleType.allCases[idx])
                         }
                     }
                     .frame(height: 200)
@@ -416,6 +380,154 @@ struct SmartCareView: View {
             return ScanModuleResult(type: .applications, isSelected: false, hasIssues: viewModel.apps.count > 0, primaryText: viewModel.apps.count > 0 ? "\(viewModel.apps.count) updates" : "No updates", secondaryText: "waiting...", detailItems: [])
         case .myClutter:
             return ScanModuleResult(type: .myClutter, isSelected: false, hasIssues: viewModel.largeFiles.count > 0, primaryText: viewModel.largeFiles.count > 0 ? "\(viewModel.largeFiles.count) items" : "No clutter", secondaryText: "waiting...", detailItems: [])
+        }
+    }
+}
+
+// MARK: - Dynamic Scanning Grid
+struct DynamicScanningGrid: View {
+    let viewModel: SmartScanViewModel
+    let activeIndex: Int
+    let currentPath: String
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Top row: Cleanup, Protection, Performance
+            HStack(spacing: 16) {
+                ForEach(0..<3, id: \.self) { index in
+                    Group {
+                        if index == activeIndex {
+                            ActiveScanCard(
+                                type: ScanModuleType.allCases[index],
+                                title: ScanModuleType.allCases[index].scanningTitle,
+                                subtitle: currentPath
+                            )
+                        } else if viewModel.completedModules.contains(ScanModuleType.allCases[index]) {
+                            if let result = viewModel.result(for: ScanModuleType.allCases[index]) {
+                                ScannedResultCard(result: result)
+                            } else {
+                                WaitingCard(type: ScanModuleType.allCases[index])
+                            }
+                        } else {
+                            WaitingCard(type: ScanModuleType.allCases[index])
+                        }
+                    }
+                    .frame(maxWidth: index == activeIndex ? .infinity : (activeIndex < 3 ? 220 : .infinity))
+                }
+            }
+            .frame(height: 280)
+            
+            // Bottom row: Applications, My Clutter
+            HStack(spacing: 16) {
+                ForEach(3..<5, id: \.self) { index in
+                    Group {
+                        if index == activeIndex {
+                            ActiveScanCard(
+                                type: ScanModuleType.allCases[index],
+                                title: ScanModuleType.allCases[index].scanningTitle,
+                                subtitle: currentPath
+                            )
+                        } else if viewModel.completedModules.contains(ScanModuleType.allCases[index]) {
+                            if let result = viewModel.result(for: ScanModuleType.allCases[index]) {
+                                ScannedResultCard(result: result)
+                            } else {
+                                WaitingCard(type: ScanModuleType.allCases[index])
+                            }
+                        } else {
+                            WaitingCard(type: ScanModuleType.allCases[index])
+                        }
+                    }
+                    .frame(maxWidth: index == activeIndex ? .infinity : (activeIndex >= 3 ? 280 : .infinity))
+                }
+            }
+            .frame(height: 220)
+        }
+    }
+}
+
+// MARK: - Scanned Result Card (compact, for completed modules during scan)
+struct ScannedResultCard: View {
+    let result: ScanModuleResult
+    
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(
+                    LinearGradient(
+                        gradient: result.type.gradient,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+            
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(result.type.rawValue)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                    Spacer()
+                    
+                    Image(systemName: result.type.icon)
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(result.type.accent.opacity(0.7))
+                        .shadow(color: result.type.accent.opacity(0.3), radius: 8, x: 0, y: 0)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.primaryText)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                    
+                    Text(result.secondaryText)
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                Spacer()
+            }
+            .padding(16)
+        }
+    }
+}
+
+// MARK: - Waiting Card (dimmed, shows module identity)
+struct WaitingCard: View {
+    let type: ScanModuleType
+    
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+            
+            VStack {
+                HStack {
+                    Text(type.rawValue)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.5))
+                    Spacer()
+                }
+                
+                Spacer()
+                
+                Image(systemName: type.icon)
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundStyle(type.accent.opacity(0.15))
+                
+                Spacer()
+            }
+            .padding(16)
         }
     }
 }

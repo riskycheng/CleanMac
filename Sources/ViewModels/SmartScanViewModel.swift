@@ -8,6 +8,12 @@ final class SmartScanViewModel {
     var healthScore: Int = 100
     var errorMessage: String?
     
+    // Track which modules have completed scanning
+    var completedModules: Set<ScanModuleType> = []
+    var scanningResults: [ScanModuleResult] = []
+    var currentModuleIndex: Int = 0
+    var currentPath: String = ""
+    
     // Raw scan data
     var junkFiles: [JunkFile] = []
     var threats: [MalwareThreat] = []
@@ -17,6 +23,10 @@ final class SmartScanViewModel {
     
     func startSmartScan() {
         guard case .idle = phase else { return }
+        completedModules = []
+        scanningResults = []
+        currentModuleIndex = 0
+        currentPath = ""
         phase = .scanning(moduleIndex: 0, currentPath: "")
         errorMessage = nil
         
@@ -27,10 +37,14 @@ final class SmartScanViewModel {
     
     func stop() {
         phase = .idle
+        completedModules = []
+        scanningResults = []
     }
     
     func startOver() {
         phase = .idle
+        completedModules = []
+        scanningResults = []
         junkFiles = []
         threats = []
         privacyItems = []
@@ -51,27 +65,36 @@ final class SmartScanViewModel {
     }
     
     private func runScanPhases() async {
-        phase = .scanning(moduleIndex: 0, currentPath: "Looking for junk...")
-        junkFiles = await FileScanner.scanSystemJunk()
-        try? await Task.sleep(nanoseconds: 600_000_000)
+        let modules = ScanModuleType.allCases
         
-        phase = .scanning(moduleIndex: 1, currentPath: "Scanning for threats...")
-        threats = await FileScanner.scanMalware()
-        try? await Task.sleep(nanoseconds: 400_000_000)
+        for (index, module) in modules.enumerated() {
+            currentModuleIndex = index
+            currentPath = module.scanningTitle
+            phase = .scanning(moduleIndex: index, currentPath: currentPath)
+            
+            switch module {
+            case .cleanup:
+                junkFiles = await FileScanner.scanSystemJunk()
+            case .protection:
+                threats = await FileScanner.scanMalware()
+            case .performance:
+                privacyItems = await FileScanner.scanPrivacyTraces()
+            case .applications:
+                apps = await FileScanner.scanApplications()
+            case .myClutter:
+                largeFiles = await FileScanner.scanLargeFiles(minSize: 50 * 1024 * 1024, maxAgeDays: 180)
+            }
+            
+            // Build partial result for this module
+            let result = buildResult(for: module)
+            scanningResults.append(result)
+            completedModules.insert(module)
+            
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
         
-        phase = .scanning(moduleIndex: 2, currentPath: "Checking performance...")
-        privacyItems = await FileScanner.scanPrivacyTraces()
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        
-        phase = .scanning(moduleIndex: 3, currentPath: "Analyzing applications...")
-        apps = await FileScanner.scanApplications()
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        
-        phase = .scanning(moduleIndex: 4, currentPath: "Analyzing your storage...")
-        largeFiles = await FileScanner.scanLargeFiles(minSize: 50 * 1024 * 1024, maxAgeDays: 180)
-        try? await Task.sleep(nanoseconds: 400_000_000)
-        
-        let results = buildResults()
+        // All done — build final results
+        let results = buildAllResults()
         
         var score = 100
         let totalJunk = junkFiles.reduce(0) { $0 + $1.size }
@@ -86,56 +109,59 @@ final class SmartScanViewModel {
         phase = .results(results)
     }
     
-    private func buildResults() -> [ScanModuleResult] {
-        let totalJunk = junkFiles.reduce(0) { $0 + $1.size }
-        let junkDetail = junkFiles.map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
-        let threatDetail = threats.map { ScanDetailItem(name: $0.name, size: 0, status: .pending) }
-        let privacyDetail = privacyItems.map { ScanDetailItem(name: $0.name, size: $0.size, status: .pending) }
-        let appUpdateDetail = apps.prefix(3).map { ScanDetailItem(name: $0.name, size: $0.totalSize, status: .pending) }
-        let clutterDetail = largeFiles.prefix(5).map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
-        
-        return [
-            ScanModuleResult(
+    private func buildResult(for type: ScanModuleType) -> ScanModuleResult {
+        switch type {
+        case .cleanup:
+            let total = junkFiles.reduce(0) { $0 + $1.size }
+            return ScanModuleResult(
                 type: .cleanup,
-                isSelected: totalJunk > 0,
-                hasIssues: totalJunk > 0,
-                primaryText: totalJunk > 0 ? ByteFormatter.string(from: totalJunk) + " of junk" : "No junk found",
+                isSelected: total > 0,
+                hasIssues: total > 0,
+                primaryText: total > 0 ? ByteFormatter.string(from: total) + " of junk" : "No junk found",
                 secondaryText: "to clean",
-                detailItems: junkDetail
-            ),
-            ScanModuleResult(
+                detailItems: junkFiles.map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
+            )
+        case .protection:
+            return ScanModuleResult(
                 type: .protection,
                 isSelected: threats.count > 0,
                 hasIssues: threats.count > 0,
-                primaryText: threats.count > 0 ? "\(threats.count) threat\(threats.count == 1 ? "" : "s")" : "Your Mac is safe",
+                primaryText: threats.count > 0 ? "\(threats.count) threat\(threats.count == 1 ? "" : "s")" : "No threats",
                 secondaryText: "to remove",
-                detailItems: threatDetail
-            ),
-            ScanModuleResult(
+                detailItems: threats.map { ScanDetailItem(name: $0.name, size: 0, status: .pending) }
+            )
+        case .performance:
+            return ScanModuleResult(
                 type: .performance,
                 isSelected: privacyItems.count > 0,
                 hasIssues: privacyItems.count > 0,
                 primaryText: privacyItems.count > 0 ? "\(privacyItems.count) task\(privacyItems.count == 1 ? "" : "s")" : "No tasks",
                 secondaryText: "to run",
-                detailItems: privacyDetail
-            ),
-            ScanModuleResult(
+                detailItems: privacyItems.map { ScanDetailItem(name: $0.name, size: $0.size, status: .pending) }
+            )
+        case .applications:
+            return ScanModuleResult(
                 type: .applications,
                 isSelected: apps.count > 0,
                 hasIssues: apps.count > 0,
                 primaryText: apps.count > 0 ? "\(min(apps.count, 5)) vital update\(min(apps.count, 5) == 1 ? "" : "s")" : "No updates",
                 secondaryText: "to install",
-                detailItems: appUpdateDetail
-            ),
-            ScanModuleResult(
+                detailItems: apps.prefix(3).map { ScanDetailItem(name: $0.name, size: $0.totalSize, status: .pending) }
+            )
+        case .myClutter:
+            return ScanModuleResult(
                 type: .myClutter,
                 isSelected: largeFiles.count > 0,
                 hasIssues: largeFiles.count > 0,
                 primaryText: largeFiles.count > 0 ? "\(largeFiles.count) item\(largeFiles.count == 1 ? "" : "s")" : "Nothing to tidy up",
                 secondaryText: "to remove",
-                detailItems: clutterDetail
+                detailItems: largeFiles.prefix(5).map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
             )
-        ]
+        }
+    }
+    
+    private func buildAllResults() -> [ScanModuleResult] {
+        return ScanModuleType.allCases.map { buildResult(for: $0) }
     }
     
     private func runProcessing(selectedTypes: [ScanModuleType], originalResults: [ScanModuleResult]) async {
@@ -143,38 +169,14 @@ final class SmartScanViewModel {
         let allModules = ScanModuleType.allCases
         
         for (moduleIdx, moduleType) in allModules.enumerated() {
-            guard selectedTypes.contains(moduleType) else {
-                // Mark unselected items with appropriate status
-                if let idx = completedResults.firstIndex(where: { $0.type == moduleType }) {
-                    if !completedResults[idx].hasIssues {
-                        switch moduleType {
-                        case .protection:
-                            completedResults[idx].completionStatus = .safe
-                            completedResults[idx].completionSubtext = "No threats to remove"
-                        case .myClutter:
-                            completedResults[idx].completionStatus = .nothingFound
-                            completedResults[idx].completionSubtext = "No duplicate downloads found"
-                        default:
-                            completedResults[idx].completionStatus = .done
-                            completedResults[idx].completionSubtext = "Done"
-                        }
-                    } else {
-                        completedResults[idx].completionStatus = .pending
-                        completedResults[idx].completionSubtext = "Skipped"
-                    }
-                }
-                continue
-            }
+            guard selectedTypes.contains(moduleType) else { continue }
             
-            updateDetailItems(for: moduleType) { $0.status = .processing }
             phase = .processing(moduleIndex: moduleIdx, itemIndex: 0)
             
             let itemCount = detailItemCount(for: moduleType)
             for itemIdx in 0..<itemCount {
                 phase = .processing(moduleIndex: moduleIdx, itemIndex: itemIdx)
-                updateDetailItem(at: moduleIdx, index: itemIdx, status: .processing)
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                updateDetailItem(at: moduleIdx, index: itemIdx, status: .done)
             }
             
             if let idx = completedResults.firstIndex(where: { $0.type == moduleType }) {
@@ -194,7 +196,6 @@ final class SmartScanViewModel {
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         
-        // Mark any remaining unprocessed modules
         for idx in completedResults.indices {
             if completedResults[idx].completionStatus.icon == "circle" {
                 if !completedResults[idx].hasIssues {
@@ -226,28 +227,14 @@ final class SmartScanViewModel {
         }
     }
     
-    private func updateDetailItems(for type: ScanModuleType, transform: (inout ScanDetailItem) -> Void) {
-        guard case .results(var results) = phase else { return }
-        if let idx = results.firstIndex(where: { $0.type == type }) {
-            for i in results[idx].detailItems.indices {
-                transform(&results[idx].detailItems[i])
-            }
-        }
-        phase = .results(results)
-    }
-    
-    private func updateDetailItem(at moduleIdx: Int, index: Int, status: ProcessingStatus) {
-        guard case .results(var results) = phase,
-              moduleIdx < results.count,
-              index < results[moduleIdx].detailItems.count else { return }
-        results[moduleIdx].detailItems[index].status = status
-        phase = .results(results)
-    }
-    
     func toggleModuleSelection(_ type: ScanModuleType) {
         guard case .results(var results) = phase,
               let idx = results.firstIndex(where: { $0.type == type }) else { return }
         results[idx].isSelected.toggle()
         phase = .results(results)
+    }
+    
+    func result(for type: ScanModuleType) -> ScanModuleResult? {
+        scanningResults.first(where: { $0.type == type })
     }
 }
