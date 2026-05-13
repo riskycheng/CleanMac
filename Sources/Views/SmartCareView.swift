@@ -14,8 +14,8 @@ struct SmartCareView: View {
                 resultsView(results: results)
             case .processing(let moduleIndex, let itemIndex):
                 processingView(moduleIndex: moduleIndex, itemIndex: itemIndex)
-            case .complete:
-                completeView
+            case .complete(let results):
+                completeView(results: results)
             }
         }
     }
@@ -71,16 +71,13 @@ struct SmartCareView: View {
     // MARK: - Scanning State
     func scanningView(moduleIndex: Int, currentPath: String) -> some View {
         VStack(spacing: 0) {
-            // Title
             Text(ScanModuleType.allCases[moduleIndex].scanningTitle)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.top, 24)
                 .padding(.bottom, 20)
             
-            // Card Grid
             HStack(spacing: 16) {
-                // Left column - active scanning card
                 ActiveScanCard(
                     type: ScanModuleType.allCases[moduleIndex],
                     title: ScanModuleType.allCases[moduleIndex].scanningTitle,
@@ -88,26 +85,17 @@ struct SmartCareView: View {
                 )
                 .frame(width: 420)
                 
-                // Right column - other modules
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         ForEach([1, 2].filter { $0 < 5 }, id: \.self) { idx in
-                            if moduleIndex != idx {
-                                placeholderCard(type: ScanModuleType.allCases[idx])
-                            } else {
-                                Color.clear
-                            }
+                            placeholderCard(type: ScanModuleType.allCases[idx])
                         }
                     }
                     .frame(height: 200)
                     
                     HStack(spacing: 16) {
                         ForEach([3, 4].filter { $0 < 5 }, id: \.self) { idx in
-                            if moduleIndex != idx {
-                                placeholderCard(type: ScanModuleType.allCases[idx])
-                            } else {
-                                Color.clear
-                            }
+                            placeholderCard(type: ScanModuleType.allCases[idx])
                         }
                     }
                     .frame(height: 200)
@@ -152,7 +140,6 @@ struct SmartCareView: View {
     // MARK: - Results State
     func resultsView(results: [ScanModuleResult]) -> some View {
         VStack(spacing: 0) {
-            // Header
             HStack {
                 Button(action: { viewModel.startOver() }) {
                     HStack(spacing: 6) {
@@ -176,78 +163,7 @@ struct SmartCareView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 20)
             
-            // Card Grid
-            HStack(spacing: 16) {
-                // Left column
-                VStack(spacing: 16) {
-                    if let cleanup = results.first(where: { $0.type == .cleanup }) {
-                        SmartCareCard(
-                            result: cleanup,
-                            isActive: false,
-                            showCheckbox: true,
-                            showReview: true,
-                            onToggle: { viewModel.toggleModuleSelection(.cleanup) },
-                            onReview: {}
-                        )
-                        .frame(height: 200)
-                    }
-                    
-                    if let apps = results.first(where: { $0.type == .applications }) {
-                        SmartCareCard(
-                            result: apps,
-                            isActive: false,
-                            showCheckbox: true,
-                            showReview: true,
-                            onToggle: { viewModel.toggleModuleSelection(.applications) },
-                            onReview: {}
-                        )
-                        .frame(height: 200)
-                    }
-                }
-                .frame(width: 420)
-                
-                // Right column
-                VStack(spacing: 16) {
-                    HStack(spacing: 16) {
-                        if let protection = results.first(where: { $0.type == .protection }) {
-                            SmartCareCard(
-                                result: protection,
-                                isActive: false,
-                                showCheckbox: true,
-                                showReview: false,
-                                onToggle: { viewModel.toggleModuleSelection(.protection) },
-                                onReview: nil
-                            )
-                        }
-                        
-                        if let performance = results.first(where: { $0.type == .performance }) {
-                            SmartCareCard(
-                                result: performance,
-                                isActive: false,
-                                showCheckbox: true,
-                                showReview: true,
-                                onToggle: { viewModel.toggleModuleSelection(.performance) },
-                                onReview: {}
-                            )
-                        }
-                    }
-                    .frame(height: 200)
-                    
-                    if let clutter = results.first(where: { $0.type == .myClutter }) {
-                        SmartCareCard(
-                            result: clutter,
-                            isActive: false,
-                            showCheckbox: true,
-                            showReview: false,
-                            onToggle: { viewModel.toggleModuleSelection(.myClutter) },
-                            onReview: nil
-                        )
-                        .frame(height: 200)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .padding(.horizontal, 32)
+            moduleCardsGrid(results: results, showCheckbox: true, showReview: true)
             
             Spacer()
             
@@ -263,7 +179,6 @@ struct SmartCareView: View {
     // MARK: - Processing State
     func processingView(moduleIndex: Int, itemIndex: Int) -> some View {
         VStack(spacing: 0) {
-            // Title
             let allModules = ScanModuleType.allCases
             let currentType = allModules[moduleIndex]
             Text(currentType.processingTitle)
@@ -272,22 +187,13 @@ struct SmartCareView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
             
-            // Card Grid
             HStack(spacing: 16) {
-                // Left - active processing card
-                if case .results(let results) = viewModel.phase {
-                    // Need to get results from viewModel somehow
-                    // Since processing phase doesn't have results, we'll use stored data
-                }
-                
-                // Build processing display using viewModel's stored data
                 ProcessingDetailCard(
                     result: buildProcessingResult(moduleIndex: moduleIndex),
                     currentItemIndex: itemIndex
                 )
                 .frame(width: 420)
                 
-                // Right - waiting cards
                 VStack(spacing: 16) {
                     HStack(spacing: 16) {
                         ForEach([1, 2].filter { $0 < 5 && $0 != moduleIndex }, id: \.self) { idx in
@@ -316,6 +222,163 @@ struct SmartCareView: View {
             )
             .padding(.bottom, 40)
         }
+    }
+    
+    // MARK: - Complete State
+    func completeView(results: [ScanModuleResult]) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: { viewModel.startOver() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("Start Over")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 32)
+            .padding(.top, 16)
+            
+            Text("Well done! Your Mac is in great shape!")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+            
+            moduleCardsGrid(results: results, showCheckbox: false, showReview: false)
+            
+            Spacer()
+            
+            HStack {
+                Spacer()
+                Button(action: {}) {
+                    Text("View Log")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.white.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 32)
+            }
+            .padding(.bottom, 24)
+        }
+    }
+    
+    // MARK: - Shared Card Grid
+    func moduleCardsGrid(results: [ScanModuleResult], showCheckbox: Bool, showReview: Bool) -> some View {
+        HStack(spacing: 16) {
+            VStack(spacing: 16) {
+                if let cleanup = results.first(where: { $0.type == .cleanup }) {
+                    Group {
+                        if showCheckbox {
+                            SmartCareCard(
+                                result: cleanup,
+                                isActive: false,
+                                showCheckbox: showCheckbox,
+                                showReview: showReview,
+                                onToggle: { viewModel.toggleModuleSelection(.cleanup) },
+                                onReview: {}
+                            )
+                        } else {
+                            CompletedCard(result: cleanup)
+                        }
+                    }
+                    .frame(height: 200)
+                }
+                
+                if let apps = results.first(where: { $0.type == .applications }) {
+                    Group {
+                        if showCheckbox {
+                            SmartCareCard(
+                                result: apps,
+                                isActive: false,
+                                showCheckbox: showCheckbox,
+                                showReview: showReview,
+                                onToggle: { viewModel.toggleModuleSelection(.applications) },
+                                onReview: {}
+                            )
+                        } else {
+                            CompletedCard(result: apps)
+                        }
+                    }
+                    .frame(height: 200)
+                }
+            }
+            .frame(width: 420)
+            
+            VStack(spacing: 16) {
+                HStack(spacing: 16) {
+                    if let protection = results.first(where: { $0.type == .protection }) {
+                        Group {
+                            if showCheckbox {
+                                SmartCareCard(
+                                    result: protection,
+                                    isActive: false,
+                                    showCheckbox: showCheckbox,
+                                    showReview: false,
+                                    onToggle: { viewModel.toggleModuleSelection(.protection) },
+                                    onReview: nil
+                                )
+                            } else {
+                                CompletedCard(result: protection)
+                            }
+                        }
+                    }
+                    
+                    if let performance = results.first(where: { $0.type == .performance }) {
+                        Group {
+                            if showCheckbox {
+                                SmartCareCard(
+                                    result: performance,
+                                    isActive: false,
+                                    showCheckbox: showCheckbox,
+                                    showReview: showReview,
+                                    onToggle: { viewModel.toggleModuleSelection(.performance) },
+                                    onReview: {}
+                                )
+                            } else {
+                                CompletedCard(result: performance)
+                            }
+                        }
+                    }
+                }
+                .frame(height: 200)
+                
+                if let clutter = results.first(where: { $0.type == .myClutter }) {
+                    Group {
+                        if showCheckbox {
+                            SmartCareCard(
+                                result: clutter,
+                                isActive: false,
+                                showCheckbox: showCheckbox,
+                                showReview: false,
+                                onToggle: { viewModel.toggleModuleSelection(.myClutter) },
+                                onReview: nil
+                            )
+                        } else {
+                            CompletedCard(result: clutter)
+                        }
+                    }
+                    .frame(height: 200)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 32)
     }
     
     func buildProcessingResult(moduleIndex: Int) -> ScanModuleResult {
@@ -355,36 +418,6 @@ struct SmartCareView: View {
             return ScanModuleResult(type: .myClutter, isSelected: false, hasIssues: viewModel.largeFiles.count > 0, primaryText: viewModel.largeFiles.count > 0 ? "\(viewModel.largeFiles.count) items" : "No clutter", secondaryText: "waiting...", detailItems: [])
         }
     }
-    
-    // MARK: - Complete State
-    var completeView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64))
-                .foregroundColor(.green)
-                .shadow(color: .green.opacity(0.5), radius: 20, x: 0, y: 0)
-            
-            Text("All Done!")
-                .font(.system(size: 32, weight: .bold))
-                .foregroundColor(.white)
-            
-            Text("Your Mac has been cleaned and optimized.")
-                .font(.system(size: 16))
-                .foregroundColor(.white.opacity(0.6))
-            
-            Spacer()
-            
-            CircularActionButton(
-                title: "Scan Again",
-                accent: Color(hex: "E040FB"),
-                action: { viewModel.startOver() }
-            )
-            .padding(.bottom, 40)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
 }
 
 // MARK: - Circular Action Button
@@ -396,13 +429,11 @@ struct CircularActionButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
-                // Outer glow
                 Circle()
                     .fill(accent.opacity(0.25))
                     .frame(width: 92, height: 92)
                     .blur(radius: 15)
                 
-                // Button
                 Circle()
                     .fill(
                         LinearGradient(

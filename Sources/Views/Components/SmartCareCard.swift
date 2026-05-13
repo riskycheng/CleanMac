@@ -99,6 +99,63 @@ struct SmartCareCard: View {
     }
 }
 
+struct CompletedCard: View {
+    let result: ScanModuleResult
+    
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 20)
+                .fill(
+                    LinearGradient(
+                        gradient: result.type.gradient,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+            
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text(result.type.rawValue)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                    Spacer()
+                    
+                    Image(systemName: result.type.icon)
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(result.type.accent.opacity(0.8))
+                        .shadow(color: result.type.accent.opacity(0.4), radius: 12, x: 0, y: 0)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.primaryText)
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    
+                    HStack(spacing: 6) {
+                        Image(systemName: result.completionStatus.icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(result.completionStatus.color)
+                        
+                        Text(result.completionSubtext)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(result.completionStatus.color)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(16)
+        }
+    }
+}
+
 struct ActiveScanCard: View {
     let type: ScanModuleType
     let title: String
@@ -268,7 +325,7 @@ struct WaitingCard: View {
     let result: ScanModuleResult
     
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.white.opacity(0.05))
                 .overlay(
@@ -276,31 +333,27 @@ struct WaitingCard: View {
                         .stroke(Color.white.opacity(0.08), lineWidth: 1)
                 )
             
-            VStack(alignment: .leading, spacing: 0) {
+            VStack {
                 HStack {
-                    Text(result.type.rawValue)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.6))
                     Spacer()
-                    
                     Image(systemName: result.type.icon)
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(result.type.accent.opacity(0.3))
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(result.type.accent.opacity(0.2))
                 }
-                
                 Spacer()
+            }
+            .padding(16)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Spacer()
+                Text(result.primaryText)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.white.opacity(0.5))
+                    .lineLimit(1)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(result.primaryText)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white.opacity(0.5))
-                        .lineLimit(1)
-                    
-                    Text("waiting...")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.3))
-                }
-                
+                Text("waiting...")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.3))
                 Spacer()
             }
             .padding(16)

@@ -26,7 +26,6 @@ final class SmartScanViewModel {
     }
     
     func stop() {
-        // In a real app we'd cancel the task; here we just reset
         phase = .idle
     }
     
@@ -47,40 +46,33 @@ final class SmartScanViewModel {
         phase = .processing(moduleIndex: 0, itemIndex: 0)
         
         Task { @MainActor in
-            await runProcessing(selectedTypes: selectedTypes)
+            await runProcessing(selectedTypes: selectedTypes, originalResults: results)
         }
     }
     
     private func runScanPhases() async {
-        // Phase 0: Cleanup
         phase = .scanning(moduleIndex: 0, currentPath: "Looking for junk...")
         junkFiles = await FileScanner.scanSystemJunk()
         try? await Task.sleep(nanoseconds: 600_000_000)
         
-        // Phase 1: Protection
         phase = .scanning(moduleIndex: 1, currentPath: "Scanning for threats...")
         threats = await FileScanner.scanMalware()
         try? await Task.sleep(nanoseconds: 400_000_000)
         
-        // Phase 2: Performance
         phase = .scanning(moduleIndex: 2, currentPath: "Checking performance...")
         privacyItems = await FileScanner.scanPrivacyTraces()
         try? await Task.sleep(nanoseconds: 400_000_000)
         
-        // Phase 3: Applications
         phase = .scanning(moduleIndex: 3, currentPath: "Analyzing applications...")
         apps = await FileScanner.scanApplications()
         try? await Task.sleep(nanoseconds: 400_000_000)
         
-        // Phase 4: My Clutter
         phase = .scanning(moduleIndex: 4, currentPath: "Analyzing your storage...")
         largeFiles = await FileScanner.scanLargeFiles(minSize: 50 * 1024 * 1024, maxAgeDays: 180)
         try? await Task.sleep(nanoseconds: 400_000_000)
         
-        // Build results
         let results = buildResults()
         
-        // Calculate health score
         var score = 100
         let totalJunk = junkFiles.reduce(0) { $0 + $1.size }
         if totalJunk > 1_000_000_000 { score -= 20 }
@@ -97,13 +89,9 @@ final class SmartScanViewModel {
     private func buildResults() -> [ScanModuleResult] {
         let totalJunk = junkFiles.reduce(0) { $0 + $1.size }
         let junkDetail = junkFiles.map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
-        
         let threatDetail = threats.map { ScanDetailItem(name: $0.name, size: 0, status: .pending) }
-        
         let privacyDetail = privacyItems.map { ScanDetailItem(name: $0.name, size: $0.size, status: .pending) }
-        
         let appUpdateDetail = apps.prefix(3).map { ScanDetailItem(name: $0.name, size: $0.totalSize, status: .pending) }
-        
         let clutterDetail = largeFiles.prefix(5).map { ScanDetailItem(name: $0.url.lastPathComponent, size: $0.size, status: .pending) }
         
         return [
@@ -119,7 +107,7 @@ final class SmartScanViewModel {
                 type: .protection,
                 isSelected: threats.count > 0,
                 hasIssues: threats.count > 0,
-                primaryText: threats.count > 0 ? "\(threats.count) threat\(threats.count == 1 ? "" : "s")" : "No threats",
+                primaryText: threats.count > 0 ? "\(threats.count) threat\(threats.count == 1 ? "" : "s")" : "Your Mac is safe",
                 secondaryText: "to remove",
                 detailItems: threatDetail
             ),
@@ -143,24 +131,44 @@ final class SmartScanViewModel {
                 type: .myClutter,
                 isSelected: largeFiles.count > 0,
                 hasIssues: largeFiles.count > 0,
-                primaryText: largeFiles.count > 0 ? "\(largeFiles.count) item\(largeFiles.count == 1 ? "" : "s")" : "No duplicates",
+                primaryText: largeFiles.count > 0 ? "\(largeFiles.count) item\(largeFiles.count == 1 ? "" : "s")" : "Nothing to tidy up",
                 secondaryText: "to remove",
                 detailItems: clutterDetail
             )
         ]
     }
     
-    private func runProcessing(selectedTypes: [ScanModuleType]) async {
+    private func runProcessing(selectedTypes: [ScanModuleType], originalResults: [ScanModuleResult]) async {
+        var completedResults = originalResults
         let allModules = ScanModuleType.allCases
         
         for (moduleIdx, moduleType) in allModules.enumerated() {
-            guard selectedTypes.contains(moduleType) else { continue }
+            guard selectedTypes.contains(moduleType) else {
+                // Mark unselected items with appropriate status
+                if let idx = completedResults.firstIndex(where: { $0.type == moduleType }) {
+                    if !completedResults[idx].hasIssues {
+                        switch moduleType {
+                        case .protection:
+                            completedResults[idx].completionStatus = .safe
+                            completedResults[idx].completionSubtext = "No threats to remove"
+                        case .myClutter:
+                            completedResults[idx].completionStatus = .nothingFound
+                            completedResults[idx].completionSubtext = "No duplicate downloads found"
+                        default:
+                            completedResults[idx].completionStatus = .done
+                            completedResults[idx].completionSubtext = "Done"
+                        }
+                    } else {
+                        completedResults[idx].completionStatus = .pending
+                        completedResults[idx].completionSubtext = "Skipped"
+                    }
+                }
+                continue
+            }
             
-            // Update detail items status
             updateDetailItems(for: moduleType) { $0.status = .processing }
             phase = .processing(moduleIndex: moduleIdx, itemIndex: 0)
             
-            // Simulate processing each item
             let itemCount = detailItemCount(for: moduleType)
             for itemIdx in 0..<itemCount {
                 phase = .processing(moduleIndex: moduleIdx, itemIndex: itemIdx)
@@ -169,10 +177,43 @@ final class SmartScanViewModel {
                 updateDetailItem(at: moduleIdx, index: itemIdx, status: .done)
             }
             
+            if let idx = completedResults.firstIndex(where: { $0.type == moduleType }) {
+                switch moduleType {
+                case .cleanup:
+                    completedResults[idx].completionStatus = .cleaned
+                    completedResults[idx].completionSubtext = "Cleaned"
+                case .applications:
+                    completedResults[idx].completionStatus = .started
+                    completedResults[idx].completionSubtext = "Started"
+                default:
+                    completedResults[idx].completionStatus = .done
+                    completedResults[idx].completionSubtext = "Done"
+                }
+            }
+            
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         
-        phase = .complete
+        // Mark any remaining unprocessed modules
+        for idx in completedResults.indices {
+            if completedResults[idx].completionStatus.icon == "circle" {
+                if !completedResults[idx].hasIssues {
+                    switch completedResults[idx].type {
+                    case .protection:
+                        completedResults[idx].completionStatus = .safe
+                        completedResults[idx].completionSubtext = "No threats to remove"
+                    case .myClutter:
+                        completedResults[idx].completionStatus = .nothingFound
+                        completedResults[idx].completionSubtext = "No duplicate downloads found"
+                    default:
+                        completedResults[idx].completionStatus = .done
+                        completedResults[idx].completionSubtext = "Done"
+                    }
+                }
+            }
+        }
+        
+        phase = .complete(completedResults)
     }
     
     private func detailItemCount(for type: ScanModuleType) -> Int {

@@ -74,6 +74,21 @@ struct ScanModuleResult: Identifiable {
     let primaryText: String
     let secondaryText: String
     var detailItems: [ScanDetailItem]
+    var completionStatus: CompletionStatus = .pending
+    var completionSubtext: String = ""
+    
+    struct CompletionStatus {
+        let icon: String
+        let text: String
+        let color: Color
+        
+        static let pending = CompletionStatus(icon: "circle", text: "Waiting...", color: .white.opacity(0.3))
+        static let cleaned = CompletionStatus(icon: "checkmark.circle.fill", text: "Cleaned", color: .green)
+        static let done = CompletionStatus(icon: "checkmark.circle.fill", text: "Done", color: .green)
+        static let started = CompletionStatus(icon: "checkmark.circle.fill", text: "Started", color: .green)
+        static let safe = CompletionStatus(icon: "checkmark.shield.fill", text: "No threats to remove", color: .green)
+        static let nothingFound = CompletionStatus(icon: "checkmark.circle.fill", text: "Nothing to tidy up", color: .green)
+    }
 }
 
 struct ScanDetailItem: Identifiable {
@@ -110,5 +125,5 @@ enum SmartCarePhase {
     case scanning(moduleIndex: Int, currentPath: String)
     case results([ScanModuleResult])
     case processing(moduleIndex: Int, itemIndex: Int)
-    case complete
+    case complete([ScanModuleResult])
 }
