@@ -6,7 +6,6 @@ import SwiftUI
 final class SystemJunkViewModel {
     var files: [JunkFile] = []
     var isScanning = false
-    var scanProgress: Double = 0
     var scanComplete = false
     var isCleaning = false
     var cleanedSize: Int64 = 0
@@ -24,14 +23,12 @@ final class SystemJunkViewModel {
         guard !isScanning else { return }
         isScanning = true
         scanComplete = false
-        scanProgress = 0
         files = []
         cleanedSize = 0
         
         Task { @MainActor in
             let results = await FileScanner.scanSystemJunk()
             self.files = results
-            self.scanProgress = 1.0
             self.isScanning = false
             self.scanComplete = true
         }
@@ -44,7 +41,15 @@ final class SystemJunkViewModel {
         
         Task { @MainActor in
             let urls = toClean.map(\.url)
-            _ = try? await TrashManager.moveToTrash(urls: urls)
+            var count = 0
+            for url in urls {
+                do {
+                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                    count += 1
+                } catch {
+                    print("Failed to trash \(url.path): \(error)")
+                }
+            }
             let cleaned = toClean.reduce(0) { $0 + $1.size }
             
             self.files.removeAll { $0.isSelected }

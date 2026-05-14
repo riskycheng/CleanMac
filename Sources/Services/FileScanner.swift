@@ -2,28 +2,79 @@ import Foundation
 
 enum FileScanner {
     
-    // MARK: - System Junk Scan
+    // MARK: - Comprehensive Junk Scan
     static func scanSystemJunk() async -> [JunkFile] {
         var results: [JunkFile] = []
+        let fm = FileManager.default
+        let home = PathConstants.home
         
-        let cachePaths = [
-            PathConstants.caches,
-            PathConstants.applicationSupport,
-            PathConstants.tmp
+        // 1. User Caches
+        results += await scanDirectory(PathConstants.caches, type: .cache, maxDepth: 3)
+        
+        // 2. System Caches (macOS system caches)
+        let systemCaches = [
+            home.appendingPathComponent("Library/Caches/com.apple"),
+            home.appendingPathComponent("Library/Caches/com.apple.Safari"),
+            home.appendingPathComponent("Library/Caches/com.apple.finder"),
+            home.appendingPathComponent("Library/Caches/com.apple.dock"),
         ]
-        
-        for path in cachePaths {
-            results += await scanDirectory(path, type: .cache, maxDepth: 3)
+        for cache in systemCaches {
+            if fm.fileExists(atPath: cache.path) {
+                results += await scanDirectory(cache, type: .systemCache, maxDepth: 2)
+            }
         }
         
-        // Logs
-        results += await scanDirectory(PathConstants.logs, type: .log, maxDepth: 2)
+        // 3. Logs
+        results += await scanDirectory(PathConstants.logs, type: .log, maxDepth: 3)
         
-        // Downloads - broken/very old files
+        // 4. System Logs
+        let systemLogPaths = [
+            URL(fileURLWithPath: "/var/log"),
+            URL(fileURLWithPath: "/private/var/log"),
+            home.appendingPathComponent("Library/Logs/DiagnosticReports"),
+        ]
+        for logPath in systemLogPaths {
+            if fm.fileExists(atPath: logPath.path) {
+                results += await scanDirectory(logPath, type: .systemLog, maxDepth: 2)
+            }
+        }
+        
+        // 5. Temporary files
+        results += await scanDirectory(PathConstants.tmp, type: .temp, maxDepth: 2)
+        let tempPaths = [
+            URL(fileURLWithPath: "/tmp"),
+            URL(fileURLWithPath: "/var/tmp"),
+            URL(fileURLWithPath: "/private/var/tmp"),
+        ]
+        for temp in tempPaths {
+            if fm.fileExists(atPath: temp.path) {
+                results += await scanDirectory(temp, type: .temp, maxDepth: 2)
+            }
+        }
+        
+        // 6. var/folders (macOS temp storage)
+        let varFolders = home.appendingPathComponent("Library/Containers")
+        if fm.fileExists(atPath: varFolders.path) {
+            results += await scanDirectory(varFolders, type: .temp, maxDepth: 2)
+        }
+        
+        // 7. Broken downloads
         results += await scanBrokenDownloads(in: PathConstants.downloads)
         
-        // Trash
-        results += await scanDirectory(PathConstants.trash, type: .trash, maxDepth: 1)
+        // 8. Trash
+        results += await scanDirectory(PathConstants.trash, type: .trash, maxDepth: 2)
+        
+        // 9. Application Support (orphaned support files)
+        results += await scanOrphanedSupportFiles()
+        
+        // 10. Browser caches
+        results += await scanBrowserCaches()
+        
+        // 11. Xcode junk
+        results += await scanXcodeJunk()
+        
+        // 12. Developer tool caches
+        results += await scanDeveloperCaches()
         
         return results.sorted { $0.size > $1.size }
     }
@@ -40,9 +91,7 @@ enum FileScanner {
         
         for fileURL in allURLs {
             let depth = fileURL.pathComponents.count - url.pathComponents.count
-            guard depth <= maxDepth else {
-                continue
-            }
+            guard depth <= maxDepth else { continue }
             
             do {
                 let attrs = try fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
@@ -52,7 +101,6 @@ enum FileScanner {
                 if !isDir, size > 0 {
                     files.append(JunkFile(url: fileURL, size: size, type: type))
                 }
-                
                 if files.count >= 5000 { break }
             } catch {
                 continue
@@ -72,7 +120,7 @@ enum FileScanner {
         
         for fileURL in contents {
             let name = fileURL.lastPathComponent.lowercased()
-            if name.hasSuffix(".crdownload") || name.hasSuffix(".part") || name.hasSuffix(".download") {
+            if name.hasSuffix(".crdownload") || name.hasSuffix(".part") || name.hasSuffix(".download") || name.hasSuffix(".partial") {
                 do {
                     let attrs = try fileURL.resourceValues(forKeys: [.fileSizeKey])
                     let size = Int64(attrs.fileSize ?? 0)
@@ -86,7 +134,134 @@ enum FileScanner {
         return files
     }
     
-    // MARK: - App Scan
+    private static func scanOrphanedSupportFiles() async -> [JunkFile] {
+        var files: [JunkFile] = []
+        let fm = FileManager.default
+        let home = PathConstants.home
+        
+        // Saved Application State
+        let savedState = home.appendingPathComponent("Library/Saved Application State")
+        if let contents = try? fm.contentsOfDirectory(at: savedState, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles) {
+            for url in contents where url.pathExtension == "savedState" {
+                var size: Int64 = 0
+                if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
+                    let allURLs = enumerator.allObjects as! [URL]
+                    for fileURL in allURLs {
+                        size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+                    }
+                }
+                if size > 0 {
+                    files.append(JunkFile(url: url, size: size, type: .orphanedSupport))
+                }
+            }
+        }
+        
+        // Application Scripts
+        let appScripts = home.appendingPathComponent("Library/Application Scripts")
+        if let contents = try? fm.contentsOfDirectory(at: appScripts, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles) {
+            for url in contents {
+                var size: Int64 = 0
+                if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
+                    let allURLs = enumerator.allObjects as! [URL]
+                    for fileURL in allURLs {
+                        size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+                    }
+                }
+                if size > 0 {
+                    files.append(JunkFile(url: url, size: size, type: .orphanedSupport))
+                }
+            }
+        }
+        
+        return files
+    }
+    
+    private static func scanBrowserCaches() async -> [JunkFile] {
+        var files: [JunkFile] = []
+        let fm = FileManager.default
+        let home = PathConstants.home
+        
+        // Safari WebKit caches
+        let safariPaths = [
+            home.appendingPathComponent("Library/Caches/com.apple.Safari"),
+            home.appendingPathComponent("Library/Caches/com.apple.WebKit.PluginProcess"),
+            home.appendingPathComponent("Library/WebKit/com.apple.Safari"),
+        ]
+        for path in safariPaths {
+            if fm.fileExists(atPath: path.path) {
+                files += await scanDirectory(path, type: .browserCache, maxDepth: 2)
+            }
+        }
+        
+        // Chrome caches
+        let chromePaths = [
+            home.appendingPathComponent("Library/Caches/Google/Chrome"),
+            home.appendingPathComponent("Library/Application Support/Google/Chrome/Default/Cache"),
+        ]
+        for path in chromePaths {
+            if fm.fileExists(atPath: path.path) {
+                files += await scanDirectory(path, type: .browserCache, maxDepth: 2)
+            }
+        }
+        
+        // Firefox caches
+        if let ffProfiles = try? fm.contentsOfDirectory(at: home.appendingPathComponent("Library/Caches/Firefox/Profiles"), includingPropertiesForKeys: nil) {
+            for profile in ffProfiles {
+                files += await scanDirectory(profile, type: .browserCache, maxDepth: 2)
+            }
+        }
+        
+        return files
+    }
+    
+    private static func scanXcodeJunk() async -> [JunkFile] {
+        var files: [JunkFile] = []
+        let fm = FileManager.default
+        let home = PathConstants.home
+        
+        let xcodePaths = [
+            home.appendingPathComponent("Library/Developer/Xcode/DerivedData"),
+            home.appendingPathComponent("Library/Developer/Xcode/Archives"),
+            home.appendingPathComponent("Library/Developer/Xcode/iOS DeviceSupport"),
+            home.appendingPathComponent("Library/Developer/Xcode/watchOS DeviceSupport"),
+            home.appendingPathComponent("Library/Developer/CoreSimulator"),
+        ]
+        
+        for path in xcodePaths {
+            if fm.fileExists(atPath: path.path) {
+                files += await scanDirectory(path, type: .xcode, maxDepth: 1)
+            }
+        }
+        
+        return files
+    }
+    
+    private static func scanDeveloperCaches() async -> [JunkFile] {
+        var files: [JunkFile] = []
+        let fm = FileManager.default
+        let home = PathConstants.home
+        
+        let paths = [
+            home.appendingPathComponent(".npm/_cacache"),
+            home.appendingPathComponent(".yarn/cache"),
+            home.appendingPathComponent("Library/Caches/pip"),
+            home.appendingPathComponent("Library/Caches/composer"),
+            home.appendingPathComponent("Library/Caches/CocoaPods"),
+            home.appendingPathComponent("Library/Caches/org.swift.swiftpm"),
+            home.appendingPathComponent(".gradle/caches"),
+            home.appendingPathComponent(".docker"),
+        ]
+        
+        for path in paths {
+            if fm.fileExists(atPath: path.path) {
+                files += await scanDirectory(path, type: .developerCache, maxDepth: 2)
+            }
+        }
+        
+        return files
+    }
+    
+    // MARK: - Comprehensive App Scan
     static func scanApplications() async -> [AppBundle] {
         var apps: [AppBundle] = []
         let paths = [PathConstants.applications, PathConstants.userApplications]
@@ -112,9 +287,7 @@ enum FileScanner {
         if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
             let allURLs = enumerator.allObjects as! [URL]
             for fileURL in allURLs {
-                if let attrs = try? fileURL.resourceValues(forKeys: [.fileSizeKey]) {
-                    size += Int64(attrs.fileSize ?? 0)
-                }
+                size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
             }
         }
         
@@ -126,10 +299,9 @@ enum FileScanner {
             version = plist["CFBundleShortVersionString"] as? String
         }
         
-        // Find leftovers in ~/Library
         var leftovers: [AppBundle.LeftoverFile] = []
         if let bid = bundleID {
-            leftovers += await findLeftovers(bundleID: bid)
+            leftovers += await findLeftovers(bundleID: bid, appName: name)
         }
         
         return AppBundle(
@@ -143,30 +315,44 @@ enum FileScanner {
         )
     }
     
-    private static func findLeftovers(bundleID: String) async -> [AppBundle.LeftoverFile] {
+    private static func findLeftovers(bundleID: String, appName: String) async -> [AppBundle.LeftoverFile] {
         var leftovers: [AppBundle.LeftoverFile] = []
         let fm = FileManager.default
-        let paths = [
-            PathConstants.caches,
-            PathConstants.applicationSupport,
-            PathConstants.home.appendingPathComponent("Library/Preferences"),
-            PathConstants.home.appendingPathComponent("Library/Containers")
+        let home = PathConstants.home
+        
+        let searchPaths = [
+            home.appendingPathComponent("Library/Caches"),
+            home.appendingPathComponent("Library/Application Support"),
+            home.appendingPathComponent("Library/Preferences"),
+            home.appendingPathComponent("Library/Containers"),
+            home.appendingPathComponent("Library/Group Containers"),
+            home.appendingPathComponent("Library/Saved Application State"),
+            home.appendingPathComponent("Library/Application Scripts"),
+            home.appendingPathComponent("Library/Logs"),
+            home.appendingPathComponent("Library/WebKit"),
+            home.appendingPathComponent("Library/LaunchAgents"),
         ]
         
-        for base in paths {
+        let bundleComponents = bundleID.split(separator: ".")
+        let lastComponent = bundleComponents.last.map(String.init) ?? ""
+        let searchTerms = [bundleID, lastComponent, appName].filter { !$0.isEmpty }
+        
+        for base in searchPaths {
             guard let contents = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.fileSizeKey], options: .skipsHiddenFiles) else { continue }
             for url in contents {
                 let itemName = url.lastPathComponent
-                if itemName.contains(bundleID) || itemName.contains(bundleID.split(separator: ".").last ?? "") {
+                let shouldMatch = searchTerms.contains { term in
+                    itemName.lowercased().contains(term.lowercased())
+                }
+                
+                if shouldMatch {
                     var size: Int64 = 0
                     var isDir: ObjCBool = false
                     if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
                         if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
                             let allURLs = enumerator.allObjects as! [URL]
                             for fileURL in allURLs {
-                                if let attrs = try? fileURL.resourceValues(forKeys: [.fileSizeKey]) {
-                                    size += Int64(attrs.fileSize ?? 0)
-                                }
+                                size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
                             }
                         }
                     } else {
@@ -177,210 +363,6 @@ enum FileScanner {
             }
         }
         
-        return leftovers
-    }
-    
-    // MARK: - Large Files
-    static func scanLargeFiles(minSize: Int64 = 100 * 1024 * 1024, maxAgeDays: Int = 365) async -> [LargeFile] {
-        var results: [LargeFile] = []
-        let fm = FileManager.default
-        let cutoffDate = Date().addingTimeInterval(-Double(maxAgeDays) * 24 * 60 * 60)
-        
-        let searchPaths = [PathConstants.home, PathConstants.downloads]
-        
-        for base in searchPaths {
-            guard let enumerator = fm.enumerator(at: base, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey], options: [.skipsHiddenFiles]) else { continue }
-            
-            let allURLs = enumerator.allObjects as! [URL]
-            
-            for url in allURLs {
-                do {
-                    let attrs = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isDirectoryKey])
-                    guard !(attrs.isDirectory ?? false) else { continue }
-                    
-                    let size = Int64(attrs.fileSize ?? 0)
-                    let modDate = attrs.contentModificationDate ?? Date.distantPast
-                    
-                    if size >= minSize || modDate < cutoffDate {
-                        results.append(LargeFile(url: url, size: size, modificationDate: modDate))
-                    }
-                    
-                    if results.count >= 2000 { break }
-                } catch { continue }
-            }
-        }
-        
-        return results.sorted { $0.size > $1.size }
-    }
-    
-    // MARK: - Space Lens
-    static func buildDiskTree(for url: URL, maxDepth: Int = 3) async -> DiskItem? {
-        let fm = FileManager.default
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
-            return nil
-        }
-        
-        let item = await buildDiskItem(url: url, currentDepth: 0, maxDepth: maxDepth)
-        return item
-    }
-    
-    private static func buildDiskItem(url: URL, currentDepth: Int, maxDepth: Int) async -> DiskItem {
-        let fm = FileManager.default
-        let name = url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent
-        
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else {
-            return DiskItem(url: url, name: name, size: 0, isDirectory: false, children: nil)
-        }
-        
-        if !isDir.boolValue {
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-            return DiskItem(url: url, name: name, size: size, isDirectory: false, children: nil)
-        }
-        
-        var totalSize: Int64 = 0
-        var children: [DiskItem] = []
-        
-        if currentDepth < maxDepth {
-            if let contents = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: .skipsHiddenFiles) {
-                for childURL in contents.prefix(100) {
-                    let child = await buildDiskItem(url: childURL, currentDepth: currentDepth + 1, maxDepth: maxDepth)
-                    totalSize += child.size
-                    children.append(child)
-                }
-            }
-        } else {
-            // At max depth, just calculate total size without building children
-            if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
-                let allURLs = enumerator.allObjects as! [URL]
-                for fileURL in allURLs {
-                    totalSize += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-                }
-            }
-        }
-        
-        children.sort { $0.size > $1.size }
-        return DiskItem(url: url, name: name, size: totalSize, isDirectory: true, children: children.isEmpty ? nil : children)
-    }
-    
-    // MARK: - Duplicates
-    static func findDuplicates(in url: URL, minSize: Int64 = 1024 * 1024) async -> [DuplicateGroup] {
-        let fm = FileManager.default
-        var sizeMap: [Int64: [URL]] = [:]
-        
-        guard let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: [.skipsHiddenFiles]) else {
-            return []
-        }
-        
-        let allURLs = enumerator.allObjects as! [URL]
-        
-        for fileURL in allURLs {
-            do {
-                let attrs = try fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
-                guard !(attrs.isDirectory ?? false) else { continue }
-                let size = Int64(attrs.fileSize ?? 0)
-                guard size >= minSize else { continue }
-                sizeMap[size, default: []].append(fileURL)
-            } catch { continue }
-        }
-        
-        var groups: [DuplicateGroup] = []
-        for (size, urls) in sizeMap where urls.count > 1 {
-            var hashMap: [String: [URL]] = [:]
-            for fileURL in urls {
-                if let hash = try? await FileHash.quickHash(for: fileURL) {
-                    hashMap[hash, default: []].append(fileURL)
-                }
-            }
-            
-            for (hash, matchingURLs) in hashMap where matchingURLs.count > 1 {
-                let files = matchingURLs.map { DuplicateGroup.DuplicateFile(url: $0, size: size) }
-                groups.append(DuplicateGroup(hash: hash, files: files, totalSize: size * Int64(files.count)))
-            }
-        }
-        
-        return groups.sorted { $0.wastedSpace > $1.wastedSpace }
-    }
-    
-    // MARK: - Privacy
-    static func scanPrivacyTraces() async -> [PrivacyItem] {
-        var items: [PrivacyItem] = []
-        let fm = FileManager.default
-        
-        // Safari history
-        if fm.fileExists(atPath: PathConstants.safariHistory.path) {
-            let size = (try? PathConstants.safariHistory.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-            items.append(PrivacyItem(name: "Safari History", url: PathConstants.safariHistory, type: .browserHistory, size: size))
-        }
-        
-        // Chrome history
-        if let chrome = PathConstants.chromeHistory, fm.fileExists(atPath: chrome.path) {
-            let size = (try? chrome.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-            items.append(PrivacyItem(name: "Chrome History", url: chrome, type: .browserHistory, size: size))
-        }
-        
-        // Recent items
-        let recentDirs = [
-            PathConstants.home.appendingPathComponent("Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments.sfl2"),
-            PathConstants.home.appendingPathComponent("Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.RecentDocuments.sfl2")
-        ]
-        for dir in recentDirs {
-            if fm.fileExists(atPath: dir.path) {
-                let size = (try? dir.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-                items.append(PrivacyItem(name: "Recent Documents", url: dir, type: .recentItems, size: size))
-            }
-        }
-        
-        return items
-    }
-    
-    // MARK: - Malware Heuristics
-    static func scanMalware() async -> [MalwareThreat] {
-        var threats: [MalwareThreat] = []
-        let fm = FileManager.default
-        
-        // Suspicious launch agents
-        if let contents = try? fm.contentsOfDirectory(at: PathConstants.launchAgents, includingPropertiesForKeys: nil) {
-            for url in contents where url.pathExtension == "plist" {
-                let name = url.deletingPathExtension().lastPathComponent
-                if name.lowercased().contains("miner") || name.lowercased().contains("coin") {
-                    threats.append(MalwareThreat(
-                        name: "Suspicious Launch Agent: \(name)",
-                        path: url.path,
-                        type: .suspiciousLaunchAgent,
-                        severity: .high
-                    ))
-                }
-            }
-        }
-        
-        // Check for quarantined files
-        let quarantineDir = PathConstants.home.appendingPathComponent("Library/Quarantine")
-        if fm.fileExists(atPath: quarantineDir.path) {
-            if let contents = try? fm.contentsOfDirectory(at: quarantineDir, includingPropertiesForKeys: nil) {
-                for url in contents {
-                    threats.append(MalwareThreat(
-                        name: "Quarantined: \(url.lastPathComponent)",
-                        path: url.path,
-                        type: .quarantinedFile,
-                        severity: .medium
-                    ))
-                }
-            }
-        }
-        
-        // Check Downloads for suspicious executables
-        if let contents = try? fm.contentsOfDirectory(at: PathConstants.downloads, includingPropertiesForKeys: nil) {
-            for url in contents {
-                let name = url.lastPathComponent.lowercased()
-                if name.hasSuffix(".dmg") || name.hasSuffix(".pkg") || name.hasSuffix(".app.zip") {
-                    // In a real app, we'd verify code signatures here
-                    // For demo purposes, we skip unsigned DMGs to avoid false positives
-                }
-            }
-        }
-        
-        return threats
+        return leftovers.sorted { $0.size > $1.size }
     }
 }

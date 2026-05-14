@@ -1,88 +1,42 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case smartCare = "Smart Care"
-    case cleanup = "Cleanup"
-    case protection = "Protection"
-    case performance = "Performance"
-    case applications = "Applications"
-    case myClutter = "My Clutter"
-    case spaceLens = "Space Lens"
-    case assistant = "Assistant"
+    case junkCleaner = "Junk Cleaner"
+    case appUninstaller = "App Uninstaller"
     
     var id: String { rawValue }
     
     var icon: String {
         switch self {
-        case .smartCare: return "sparkles.tv"
-        case .cleanup: return "bubbles.and.sparkles"
-        case .protection: return "hand.raised.fill"
-        case .performance: return "bolt.fill"
-        case .applications: return "square.grid.2x2"
-        case .myClutter: return "folder.fill"
-        case .spaceLens: return "circle.grid.3x3"
-        case .assistant: return "bubble.left.and.bubble.right.fill"
-        }
-    }
-    
-    var scanModuleType: ScanModuleType? {
-        switch self {
-        case .cleanup: return .cleanup
-        case .protection: return .protection
-        case .performance: return .performance
-        case .applications: return .applications
-        case .myClutter: return .myClutter
-        default: return nil
+        case .junkCleaner: return "trash.circle.fill"
+        case .appUninstaller: return "xmark.app.fill"
         }
     }
     
     var gradient: Gradient {
         switch self {
-        case .smartCare:
-            return Gradient(colors: [Color(hex: "4A148C"), Color(hex: "1A0033")])
-        case .cleanup:
+        case .junkCleaner:
             return Gradient(colors: [Color(hex: "1B5E20"), Color(hex: "0D2810")])
-        case .protection:
-            return Gradient(colors: [Color(hex: "880E4F"), Color(hex: "330018")])
-        case .performance:
-            return Gradient(colors: [Color(hex: "E65100"), Color(hex: "3E1C00")])
-        case .applications:
+        case .appUninstaller:
             return Gradient(colors: [Color(hex: "0D47A1"), Color(hex: "001233")])
-        case .myClutter:
-            return Gradient(colors: [Color(hex: "006064"), Color(hex: "001F22")])
-        case .spaceLens:
-            return Gradient(colors: [Color(hex: "311B92"), Color(hex: "0D0221")])
-        case .assistant:
-            return Gradient(colors: [Color(hex: "4A148C"), Color(hex: "1A0033")])
         }
     }
     
     var accent: Color {
         switch self {
-        case .smartCare: return Color(hex: "E040FB")
-        case .cleanup: return Color(hex: "69F0AE")
-        case .protection: return Color(hex: "FF4081")
-        case .performance: return Color(hex: "FFAB40")
-        case .applications: return Color(hex: "448AFF")
-        case .myClutter: return Color(hex: "18FFFF")
-        case .spaceLens: return Color(hex: "B388FF")
-        case .assistant: return Color(hex: "E040FB")
+        case .junkCleaner: return Color(hex: "69F0AE")
+        case .appUninstaller: return Color(hex: "448AFF")
         }
     }
 }
 
 struct SidebarView: View {
     @Binding var selection: SidebarItem
-    var completedModules: Set<ScanModuleType> = []
     
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 12) {
             ForEach(SidebarItem.allCases) { item in
-                SidebarRow(
-                    item: item,
-                    isSelected: selection == item,
-                    isCompleted: item.scanModuleType.map { completedModules.contains($0) } ?? false
-                ) {
+                SidebarRow(item: item, isSelected: selection == item) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         selection = item
                     }
@@ -90,13 +44,22 @@ struct SidebarView: View {
             }
             
             Spacer()
+            
+            VStack(spacing: 4) {
+                Text("CleanMac")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.5))
+                Text("v1.0.0")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.3))
+            }
+            .padding(.bottom, 16)
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, 24)
         .padding(.horizontal, 12)
         .frame(width: 200)
         .background(
             Color.black.opacity(0.25)
-                .blur(radius: 0.5)
         )
     }
 }
@@ -104,45 +67,30 @@ struct SidebarView: View {
 struct SidebarRow: View {
     let item: SidebarItem
     let isSelected: Bool
-    let isCompleted: Bool
     let action: () -> Void
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                ZStack {
-                    Image(systemName: item.icon)
-                        .font(.system(size: 18, weight: .medium))
-                        .frame(width: 24, height: 24)
-                        .foregroundStyle(isSelected ? item.accent : .white.opacity(0.85))
-                    
-                    if isCompleted {
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 14, height: 14)
-                            .overlay(
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.white)
-                            )
-                            .offset(x: 10, y: -10)
-                    }
-                }
+                Image(systemName: item.icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .frame(width: 28, height: 28)
+                    .foregroundStyle(isSelected ? item.accent : .white.opacity(0.85))
                 
                 Text(item.rawValue)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? .white : .white.opacity(0.85))
                 
                 Spacer()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? Color.white.opacity(0.12) : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 12)
                     .stroke(isSelected ? item.accent.opacity(0.4) : Color.clear, lineWidth: 1)
             )
         }
@@ -157,11 +105,11 @@ extension Color {
         Scanner(string: hex).scanHexInt64(&int)
         let a, r, g, b: UInt64
         switch hex.count {
-        case 3: // RGB (12-bit)
+        case 3:
             (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
+        case 6:
             (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
+        case 8:
             (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
             (a, r, g, b) = (255, 0, 0, 0)
