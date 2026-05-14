@@ -9,17 +9,17 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     
     var icon: String {
         switch self {
-        case .auto: return "cpu"
-        case .junkCleaner: return "trash.circle.fill"
-        case .appUninstaller: return "xmark.app.fill"
+        case .auto: return "sparkles"
+        case .junkCleaner: return "trash"
+        case .appUninstaller: return "xmark.app"
         }
     }
     
     var accent: Color {
         switch self {
-        case .auto: return .cyan
+        case .auto: return .green
         case .junkCleaner: return .green
-        case .appUninstaller: return .blue
+        case .appUninstaller: return .green
         }
     }
 }
@@ -28,27 +28,27 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem
     
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             // Logo area
             HStack(spacing: 10) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.cyan)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.green.opacity(0.8))
                 Text("CleanMac")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.white)
                 Spacer()
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 18)
             
             Divider()
-                .background(Color.white.opacity(0.08))
+                .background(Color.white.opacity(0.06))
                 .padding(.horizontal, 12)
             
             ForEach(SidebarItem.allCases) { item in
                 SidebarRow(item: item, isSelected: selection == item) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         selection = item
                     }
                 }
@@ -57,27 +57,20 @@ struct SidebarView: View {
             Spacer()
             
             // Status footer
-            HStack {
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.green)
-                    .frame(width: 6, height: 6)
-                Text("System Ready")
+                    .fill(Color.green.opacity(0.7))
+                    .frame(width: 5, height: 5)
+                Text("Ready")
                     .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.4))
+                    .foregroundColor(.white.opacity(0.3))
                 Spacer()
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.bottom, 12)
         }
         .padding(.vertical, 8)
         .frame(width: 180)
-        .background(
-            ZStack {
-                Color.black.opacity(0.3)
-                VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
-                    .opacity(0.5)
-            }
-        )
     }
 }
 
@@ -85,37 +78,27 @@ struct SidebarRow: View {
     let item: SidebarItem
     let isSelected: Bool
     let action: () -> Void
+    @State private var hover: Bool = false
     
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 24, height: 24)
-                    .foregroundStyle(isSelected ? item.accent : .white.opacity(0.6))
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 22, height: 22)
+                    .foregroundStyle(isSelected ? .white : .white.opacity(0.45))
                 
                 Text(item.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.6))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : .white.opacity(0.45))
                 
                 Spacer()
-                
-                if isSelected {
-                    Circle()
-                        .fill(item.accent)
-                        .frame(width: 6, height: 6)
-                        .shadow(color: item.accent.opacity(0.6), radius: 4)
-                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(isSelected ? Color.white.opacity(0.08) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? item.accent.opacity(0.3) : Color.clear, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

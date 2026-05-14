@@ -5,31 +5,35 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Deep dark background
+            // Soft dark background
             Color.black.opacity(0.92)
             
-            // Subtle grid pattern
-            GridPattern()
-                .opacity(0.03)
-            
-            // Matrix particles
-            MatrixParticlesView()
-                .opacity(0.25)
+            // Subtle ambient gradient
+            RadialGradient(
+                colors: [
+                    Color(hex: "1a2e1a").opacity(0.4),
+                    Color(hex: "0d1a0d").opacity(0.2),
+                    Color.clear
+                ],
+                center: .topLeading,
+                startRadius: 100,
+                endRadius: 800
+            )
             
             // Main content
             HStack(spacing: 0) {
                 SidebarView(selection: $selectedItem)
                     .frame(width: 180)
                     .background(
-                        Color.black.opacity(0.4)
+                        Color.black.opacity(0.3)
                             .overlay(
                                 VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
-                                    .opacity(0.4)
+                                    .opacity(0.3)
                             )
                     )
                 
                 Divider()
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.white.opacity(0.05))
                 
                 ZStack {
                     switch selectedItem {
@@ -42,29 +46,6 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black.opacity(0.15))
-            }
-        }
-    }
-}
-
-struct GridPattern: View {
-    var body: some View {
-        GeometryReader { geo in
-            Canvas { context, size in
-                let spacing: CGFloat = 40
-                for x in stride(from: 0, to: size.width, by: spacing) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: size.height))
-                    context.stroke(path, with: .color(.white), lineWidth: 0.3)
-                }
-                for y in stride(from: 0, to: size.height, by: spacing) {
-                    var path = Path()
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: size.width, y: y))
-                    context.stroke(path, with: .color(.white), lineWidth: 0.3)
-                }
             }
         }
     }

@@ -85,19 +85,18 @@ final class AutoModeViewModel {
             let time = timeString()
             scanLog.append("[\(time)] \(stage)")
             
-            // Add some simulated file discoveries for visual effect
             if progress > 0.15 && progress < 0.95 && Int.random(in: 0...3) == 0 {
                 let fakeFiles = [
-                    "Found cache bundle: com.apple.Safari (12.4 MB)",
-                    "Parsed log archive: system.log.2.gz (4.2 MB)",
-                    "Detected temp files: /var/tmp/session_X7A2 (89.3 MB)",
-                    "Indexed download: pending_update.zip (256 MB)",
-                    "Scanned app bundle: Xcode.app (2.1 GB)",
-                    "Found leftovers: com.google.Chrome (340 MB)",
-                    "Parsed DerivedData: Build/Products (1.2 GB)",
-                    "Indexed npm cache: _cacache/content (45 MB)",
+                    "> Detected cache bundle: com.apple.Safari (12.4 MB)",
+                    "> Parsed log archive: system.log.2.gz (4.2 MB)",
+                    "> Found temp files: /var/tmp/session_X7A2 (89.3 MB)",
+                    "> Indexed download: pending_update.zip (256 MB)",
+                    "> Scanned app: Xcode.app (2.1 GB)",
+                    "> Found leftovers: com.google.Chrome (340 MB)",
+                    "> Parsed DerivedData: Build/Products (1.2 GB)",
+                    "> Indexed npm cache: _cacache (45 MB)",
                 ]
-                scanLog.append("[\(time)] > \(fakeFiles.randomElement()!)")
+                scanLog.append("[\(time)] \(fakeFiles.randomElement()!)")
             }
             
             if scanLog.count > 40 { scanLog.removeFirst(scanLog.count - 40) }
@@ -129,7 +128,7 @@ final class AutoModeViewModel {
         
         for file in selectedJunk {
             if shouldStop { break }
-            await updateClean(stage: "rm \(file.name)", progress: Double(processed) / Double(max(totalItems, 1)))
+            await updateClean(stage: "Removing \(file.name)...", progress: Double(processed) / Double(max(totalItems, 1)))
             do {
                 try FileManager.default.trashItem(at: file.url, resultingItemURL: nil)
                 spaceReclaimed += file.size
@@ -141,7 +140,7 @@ final class AutoModeViewModel {
         
         for app in selectedApps {
             if shouldStop { break }
-            await updateClean(stage: "uninstall \(app.name)", progress: Double(processed) / Double(max(totalItems, 1)))
+            await updateClean(stage: "Uninstalling \(app.name)...", progress: Double(processed) / Double(max(totalItems, 1)))
             do {
                 try FileManager.default.trashItem(at: app.url, resultingItemURL: nil)
                 spaceReclaimed += app.size
@@ -200,6 +199,14 @@ final class AutoModeViewModel {
             app.isSelected = !allSelected
         }
     }
+    
+    func categorySize(_ category: JunkCategory) -> Int64 {
+        junkFiles.filter { $0.category == category }.reduce(0) { $0 + $1.size }
+    }
+    
+    func filesInCategory(_ category: JunkCategory) -> [JunkFile] {
+        junkFiles.filter { $0.category == category }
+    }
 }
 
 struct AutoModeView: View {
@@ -209,9 +216,7 @@ struct AutoModeView: View {
         ZStack {
             switch viewModel.state {
             case .idle:
-                TerminalIdleView {
-                    viewModel.startIntelligentScan()
-                }
+                IdleView(onStart: { viewModel.startIntelligentScan() })
             case .scanning:
                 TerminalScannerView(
                     progress: viewModel.scanProgress,
@@ -219,540 +224,558 @@ struct AutoModeView: View {
                     logLines: viewModel.scanLog
                 )
             case .reviewing:
-                DashboardReviewView(viewModel: viewModel)
+                ElegantReviewView(viewModel: viewModel)
             case .cleaning:
-                TerminalCleaningView(viewModel: viewModel)
+                CleaningView(viewModel: viewModel)
             case .complete:
-                CompleteDashboardView(viewModel: viewModel)
+                CompleteView(viewModel: viewModel)
             }
         }
     }
 }
 
-// MARK: - Dashboard Review View
+// MARK: - Idle View
 
-struct DashboardReviewView: View {
-    @Bindable var viewModel: AutoModeViewModel
-    @State private var showFiles: Bool = false
+struct IdleView: View {
+    let onStart: () -> Void
+    @State private var pulse: Bool = false
     
-    var junkBreakdown: [(label: String, value: Int64, color: Color)] {
-        categoryBreakdown(from: viewModel.junkFiles)
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer().frame(height: 60)
+            
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [.green.opacity(0.12), .clear],
+                            center: .center,
+                            startRadius: 20,
+                            endRadius: 120
+                        )
+                    )
+                    .frame(width: 200, height: 200)
+                    .scaleEffect(pulse ? 1.1 : 0.95)
+                    .opacity(pulse ? 0.5 : 0.8)
+                
+                Image(systemName: "sparkles")
+                    .font(.system(size: 56, weight: .light))
+                    .foregroundStyle(.green.opacity(0.7))
+            }
+            .frame(height: 200)
+            
+            VStack(spacing: 12) {
+                Text("CleanMac")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("One-click scan to find and remove\njunk files, caches, and unused apps.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+            
+            Button(action: onStart) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("Scan My Mac")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 28)
+                .padding(.vertical, 14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.green.opacity(0.2))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 12)
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
     }
+}
+
+// MARK: - Elegant Review View
+
+struct ElegantReviewView: View {
+    @Bindable var viewModel: AutoModeViewModel
+    @State private var selectedCategory: JunkCategory? = nil
+    @State private var showApps: Bool = false
     
-    var topJunkItems: [(name: String, size: Int64, color: Color)] {
-        topItems(from: viewModel.junkFiles, limit: 8)
+    var activeCategories: [JunkCategory] {
+        JunkCategory.allCases.filter { viewModel.categorySize($0) > 0 }
     }
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                // Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.shield.fill")
-                                .font(.system(size: 20))
-                                .foregroundStyle(.green)
-                            Text("Scan Complete")
-                                .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        Text("Found \(viewModel.totalItems) items · \(ByteFormatter.string(from: viewModel.totalSize)) reclaimable")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                    Spacer()
+            VStack(spacing: 20) {
+                // Headline
+                VStack(spacing: 8) {
+                    Text("\(ByteFormatter.string(from: viewModel.totalSize)) of junk found")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Found \(viewModel.totalItems) items that can be safely removed")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.45))
                 }
+                .padding(.top, 8)
                 
-                // Stat grid
-                StatGrid(stats: [
-                    (icon: "doc.fill", label: "Junk Files", value: "\(viewModel.junkFiles.count)", color: .green),
-                    (icon: "app.fill", label: "Applications", value: "\(viewModel.apps.count)", color: .blue),
-                    (icon: "externaldrive.fill", label: "Junk Size", value: ByteFormatter.string(from: viewModel.totalJunkSize), color: .cyan),
-                    (icon: "archivebox.fill", label: "App Size", value: ByteFormatter.string(from: viewModel.totalAppSize), color: .orange),
-                ])
-                
-                // Charts row
-                HStack(spacing: 16) {
-                    // Donut chart
-                    GlassCard(accent: .cyan) {
-                        VStack(spacing: 12) {
-                            Text("Space Distribution")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            
-                            HStack(spacing: 20) {
-                                DonutChart(
-                                    data: [
-                                        ("Junk", viewModel.totalJunkSize, .green),
-                                        ("Apps", viewModel.totalAppSize, .blue)
-                                    ],
-                                    total: viewModel.totalSize,
-                                    centerLabel: "Total",
-                                    centerValue: ByteFormatter.string(from: viewModel.totalSize)
-                                )
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack(spacing: 8) {
-                                        Circle().fill(.green).frame(width: 8, height: 8)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text("Junk Files")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.white.opacity(0.6))
-                                            Text(ByteFormatter.string(from: viewModel.totalJunkSize))
-                                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                                .foregroundColor(.green)
-                                        }
-                                    }
-                                    HStack(spacing: 8) {
-                                        Circle().fill(.blue).frame(width: 8, height: 8)
-                                        VStack(alignment: .leading, spacing: 1) {
-                                            Text("Applications")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(.white.opacity(0.6))
-                                            Text(ByteFormatter.string(from: viewModel.totalAppSize))
-                                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                                                .foregroundColor(.blue)
-                                        }
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                // Bento grid of category cards
+                let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+                LazyVGrid(columns: columns, spacing: 12) {
+                    // Junk categories
+                    ForEach(activeCategories, id: \.self) { category in
+                        CategoryCard(
+                            category: category,
+                            size: viewModel.categorySize(category),
+                            count: viewModel.filesInCategory(category).count,
+                            isSelected: viewModel.filesInCategory(category).allSatisfy { $0.isSelected }
+                        ) {
+                            toggleCategory(category)
                         }
                     }
                     
-                    // Category breakdown
-                    GlassCard(accent: .green) {
-                        VStack(spacing: 10) {
-                            Text("Category Breakdown")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            
-                            if junkBreakdown.isEmpty {
-                                Text("No junk data")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.white.opacity(0.3))
-                            } else {
-                                HorizontalBarChart(
-                                    data: junkBreakdown,
-                                    total: viewModel.totalJunkSize,
-                                    unit: ""
-                                )
-                            }
+                    // Apps card if any found
+                    if !viewModel.apps.isEmpty {
+                        AppCategoryCard(
+                            count: viewModel.apps.count,
+                            size: viewModel.totalAppSize,
+                            isSelected: viewModel.apps.allSatisfy { $0.isSelected }
+                        ) {
+                            viewModel.toggleAllApps()
                         }
                     }
                 }
-                
-                // Top items chart
-                if !topJunkItems.isEmpty {
-                    GlassCard(accent: .orange) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Top Largest Items")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.8))
-                            
-                            TopItemsChart(
-                                items: topJunkItems,
-                                maxSize: topJunkItems.first?.size ?? 1
-                            )
-                        }
-                    }
-                }
-                
-                // File list (collapsible)
-                if !viewModel.junkFiles.isEmpty || !viewModel.apps.isEmpty {
-                    Button(action: { showFiles.toggle() }) {
-                        HStack {
-                            Text(showFiles ? "Hide Details" : "View All Files")
-                                .font(.system(size: 12, weight: .medium))
-                            Image(systemName: showFiles ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 10))
-                        }
-                        .foregroundColor(.cyan)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.cyan.opacity(0.06))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.cyan.opacity(0.15), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    
-                    if showFiles {
-                        DetailFileList(viewModel: viewModel)
-                    }
-                }
-                
-                Spacer()
                 
                 // Action buttons
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
                     Button("Cancel") {
                         viewModel.reset()
                     }
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-                    .padding(.horizontal, 24)
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.horizontal, 22)
                     .padding(.vertical, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.05))
+                            .fill(Color.white.opacity(0.04))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
                     )
                     .buttonStyle(.plain)
                     
                     let selectedCount = viewModel.junkFiles.filter { $0.isSelected }.count + viewModel.apps.filter { $0.isSelected }.count
-                    GlowButton(
-                        title: "Clean \(selectedCount) Items",
-                        icon: "bolt.fill",
-                        color: .cyan
-                    ) {
-                        viewModel.startCleanup()
+                    let selectedSize = viewModel.junkFiles.filter { $0.isSelected }.reduce(0) { $0 + $1.size } + viewModel.apps.filter { $0.isSelected }.reduce(0) { $0 + $1.totalSize }
+                    
+                    Button(action: { viewModel.startCleanup() }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                            Text("Clean \(ByteFormatter.string(from: selectedSize))")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(selectedCount > 0 ? Color.green.opacity(0.25) : Color.white.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(selectedCount > 0 ? Color.green.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
+                                )
+                        )
                     }
+                    .buttonStyle(.plain)
+                    .disabled(selectedCount == 0)
+                    .opacity(selectedCount > 0 ? 1.0 : 0.5)
                 }
+                .padding(.top, 8)
+                .padding(.bottom, 16)
             }
             .padding(20)
         }
     }
+    
+    func toggleCategory(_ category: JunkCategory) {
+        let files = viewModel.filesInCategory(category)
+        let allSelected = files.allSatisfy { $0.isSelected }
+        for file in files {
+            file.isSelected = !allSelected
+        }
+    }
 }
 
-struct DetailFileList: View {
-    @Bindable var viewModel: AutoModeViewModel
+struct CategoryCard: View {
+    let category: JunkCategory
+    let size: Int64
+    let count: Int
+    let isSelected: Bool
+    let onToggle: () -> Void
+    @State private var hover: Bool = false
+    
+    var description: String {
+        switch category {
+        case .caches: return "Clean up unneeded cache files generated by your apps."
+        case .systemCaches: return "Remove system-level caches to free up space."
+        case .logs: return "Old log files that are safe to delete."
+        case .tempFiles: return "Temporary files that are no longer needed."
+        case .brokenDownloads: return "Incomplete or broken download files."
+        case .trash: return "Items already in your Trash bin."
+        case .orphanedSupport: return "Leftover support files from removed apps."
+        case .browserCache: return "Web browser caches and temporary data."
+        case .xcodeJunk: return "Xcode build artifacts, simulators, and archives."
+        case .developerCache: return "Caches from development tools like npm, CocoaPods."
+        case .systemLogs: return "System diagnostic and error logs."
+        case .userLogs: return "Application logs from your user account."
+        }
+    }
     
     var body: some View {
-        VStack(spacing: 12) {
-            if !viewModel.junkFiles.isEmpty {
-                HStack {
-                    Text("Junk Files (\(viewModel.junkFiles.count))")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button(viewModel.junkFiles.allSatisfy({ $0.isSelected }) ? "Deselect All" : "Select All") {
-                        viewModel.toggleAllJunk()
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: category.icon)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        
+                        Text("\(ByteFormatter.string(from: size))")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .buttonStyle(.plain)
-                    .foregroundColor(.green)
+                    
+                    Text(category.displayName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                    
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.3))
+                        .lineLimit(2)
+                        .lineSpacing(2)
                 }
                 
-                LazyVStack(spacing: 4) {
-                    ForEach(viewModel.junkFiles) { file in
-                        JunkItemRow(file: file, color: .green)
+                Spacer()
+                
+                // Selection indicator
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(isSelected ? .green : .white.opacity(0.15))
+            }
+            .padding(14)
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Button(action: onToggle) {
+                    Text(isSelected ? "Deselect" : "Select")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.white.opacity(0.05))
+                        )
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Text("\(count) items")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.25))
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
+        }
+        .frame(minHeight: 130)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(isSelected ? Color.green.opacity(0.06) : Color.white.opacity(0.025))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isSelected ? Color.green.opacity(0.2) : Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .onHover { isHover in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                hover = isHover
+            }
+        }
+        .scaleEffect(hover ? 1.015 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggle()
+        }
+    }
+}
+
+struct AppCategoryCard: View {
+    let count: Int
+    let size: Int64
+    let isSelected: Bool
+    let onToggle: () -> Void
+    @State private var hover: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "app")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        
+                        Text("\(ByteFormatter.string(from: size))")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    
+                    Text("Applications")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.5))
+                    
+                    Text("Installed apps and their leftover support files.")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.3))
+                        .lineLimit(2)
+                        .lineSpacing(2)
+                }
+                
+                Spacer()
+                
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(isSelected ? .green : .white.opacity(0.15))
+            }
+            .padding(14)
+            
+            Spacer()
+            
+            HStack(spacing: 8) {
+                Button(action: onToggle) {
+                    Text(isSelected ? "Deselect" : "Select")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.white.opacity(0.05))
+                        )
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                Text("\(count) apps")
+                    .font(.system(size: 10))
+                    .foregroundColor(.white.opacity(0.25))
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
+        }
+        .frame(minHeight: 130)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(isSelected ? Color.green.opacity(0.06) : Color.white.opacity(0.025))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(isSelected ? Color.green.opacity(0.2) : Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
+        .onHover { isHover in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                hover = isHover
+            }
+        }
+        .scaleEffect(hover ? 1.015 : 1.0)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onToggle()
+        }
+    }
+}
+
+// MARK: - Cleaning View
+
+struct CleaningView: View {
+    let viewModel: AutoModeViewModel
+    
+    var body: some View {
+        VStack(spacing: 40) {
+            Spacer().frame(height: 60)
+            
+            ZStack {
+                Circle()
+                    .stroke(Color.green.opacity(0.15), lineWidth: 3)
+                    .frame(width: 140, height: 140)
+                
+                Circle()
+                    .trim(from: 0, to: viewModel.cleanProgress)
+                    .stroke(Color.green.opacity(0.6), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                    .frame(width: 140, height: 140)
+                    .rotationEffect(.degrees(-90))
+                
+                VStack(spacing: 2) {
+                    Text("\(Int(viewModel.cleanProgress * 100))%")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("Cleaning...")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+            }
+            .frame(height: 160)
+            
+            VStack(spacing: 10) {
+                Text(viewModel.cleanStage)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.6))
+                
+                HStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        Text("\(viewModel.itemsCleaned)")
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundColor(.green)
+                        Text("items")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text(ByteFormatter.string(from: viewModel.spaceReclaimed))
+                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .foregroundColor(.green)
+                        Text("reclaimed")
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.35))
                     }
                 }
             }
             
-            if !viewModel.apps.isEmpty {
-                HStack {
-                    Text("Applications (\(viewModel.apps.count))")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
-                    Spacer()
-                    Button(viewModel.apps.allSatisfy({ $0.isSelected }) ? "Deselect All" : "Select All") {
-                        viewModel.toggleAllApps()
-                    }
-                    .font(.system(size: 11, weight: .medium))
-                    .buttonStyle(.plain)
-                    .foregroundColor(.blue)
-                }
-                
-                LazyVStack(spacing: 4) {
-                    ForEach(viewModel.apps) { app in
-                        AppItemRow(app: app, color: .blue)
-                    }
-                }
-            }
+            Spacer()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
-// MARK: - Terminal Cleaning View
+// MARK: - Complete View
 
-struct TerminalCleaningView: View {
-    let viewModel: AutoModeViewModel
-    @State private var logLines: [String] = []
-    
-    var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                DataStreamView().opacity(0.08)
-                
-                VStack(spacing: 0) {
-                    HStack {
-                        HStack(spacing: 6) {
-                            Circle().fill(Color.red.opacity(0.8)).frame(width: 10, height: 10)
-                            Circle().fill(Color.yellow.opacity(0.8)).frame(width: 10, height: 10)
-                            Circle().fill(Color.green.opacity(0.8)).frame(width: 10, height: 10)
-                        }
-                        Spacer()
-                        Text("cleanmac — cleanup — 80x24")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.3))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.4))
-                    
-                    Divider().background(Color.white.opacity(0.08))
-                    
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("[CLEAN] Starting cleanup operation...")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.green.opacity(0.7))
-                            Text("[CLEAN] Target: \(viewModel.junkFiles.filter { $0.isSelected }.count) junk files, \(viewModel.apps.filter { $0.isSelected }.count) apps")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.green.opacity(0.7))
-                            
-                            Text("$")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundColor(.green.opacity(0.6)) +
-                            Text(" \(viewModel.cleanStage)")
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.cyan)
-                            
-                            ForEach(logLines, id: \.self) { line in
-                                TerminalLogLine(text: line)
-                            }
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    
-                    Divider().background(Color.white.opacity(0.08))
-                    
-                    HStack(spacing: 8) {
-                        Text("[")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                        
-                        GeometryReader { barGeo in
-                            let filled = Int((barGeo.size.width / 8) * viewModel.cleanProgress)
-                            let total = Int(barGeo.size.width / 8)
-                            HStack(spacing: 0) {
-                                Text(String(repeating: "=", count: max(0, filled)))
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.green)
-                                Text(String(repeating: "-", count: max(0, total - filled)))
-                                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                                    .foregroundColor(.white.opacity(0.15))
-                            }
-                        }
-                        .frame(height: 14)
-                        
-                        Text("]")
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                        
-                        Text("\(Int(viewModel.cleanProgress * 100))%")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundColor(.green)
-                            .frame(width: 40)
-                        
-                        Text("· \(viewModel.itemsCleaned) removed")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Color.black.opacity(0.4))
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.85))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.green.opacity(0.15), lineWidth: 1)
-                        )
-                )
-                .padding(20)
-            }
-        }
-    }
-}
-
-// MARK: - Complete Dashboard View
-
-struct CompleteDashboardView: View {
+struct CompleteView: View {
     let viewModel: AutoModeViewModel
     @State private var appear: Bool = false
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Spacer().frame(height: 20)
+        VStack(spacing: 32) {
+            Spacer().frame(height: 60)
+            
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.1))
+                    .frame(width: 140, height: 140)
                 
-                // Success icon
-                ZStack {
-                    Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [.green.opacity(0.3), .clear],
-                                center: .center,
-                                startRadius: 10,
-                                endRadius: 100
-                            )
-                        )
-                        .frame(width: 180, height: 180)
-                    
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 64))
-                        .foregroundStyle(.green)
-                        .shadow(color: .green.opacity(0.5), radius: 20)
-                        .scaleEffect(appear ? 1 : 0.1)
-                }
-                .frame(height: 180)
-                
-                VStack(spacing: 8) {
-                    Text("Cleanup Complete")
-                        .font(.system(size: 26, weight: .bold))
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.green)
+                    .scaleEffect(appear ? 1 : 0.5)
+                    .opacity(appear ? 1 : 0)
+            }
+            .frame(height: 160)
+            
+            VStack(spacing: 8) {
+                Text("Cleanup Complete")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                Text("Your Mac has been optimized")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.45))
+            }
+            
+            HStack(spacing: 32) {
+                VStack(spacing: 4) {
+                    Text("\(viewModel.itemsCleaned)")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
-                    Text("Your Mac has been optimized")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.5))
+                    Text("Items Removed")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.35))
                 }
                 
-                // Result stats
-                StatGrid(stats: [
-                    (icon: "trash.fill", label: "Items Removed", value: "\(viewModel.itemsCleaned)", color: .green),
-                    (icon: "externaldrive.fill.badge.checkmark", label: "Space Reclaimed", value: ByteFormatter.string(from: viewModel.spaceReclaimed), color: .cyan),
-                    (icon: "chart.bar.fill", label: "Efficiency", value: "\(viewModel.itemsCleaned > 0 ? ByteFormatter.string(from: viewModel.spaceReclaimed / Int64(viewModel.itemsCleaned)) : "0")/item", color: .orange),
-                    (icon: "clock.fill", label: "Status", value: "Done", color: .blue),
-                ])
-                .opacity(appear ? 1 : 0)
-                .offset(y: appear ? 0 : 20)
+                Divider()
+                    .frame(height: 40)
+                    .background(Color.white.opacity(0.08))
                 
-                Spacer()
-                
-                GlowButton(
-                    title: "Run Again",
-                    icon: "arrow.clockwise",
-                    color: .cyan
-                ) {
-                    viewModel.reset()
-                }
-                .padding(.bottom, 20)
-            }
-            .padding(20)
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6).delay(0.2)) {
-                appear = true
-            }
-        }
-    }
-}
-
-// MARK: - Reusable Item Rows
-
-struct JunkItemRow: View {
-    @Bindable var file: JunkFile
-    let color: Color
-    
-    var body: some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: $file.isSelected)
-                .toggleStyle(.checkbox)
-                .controlSize(.small)
-            
-            Image(systemName: file.category.icon)
-                .font(.system(size: 12))
-                .foregroundColor(color.opacity(0.6))
-                .frame(width: 20)
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text(file.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.85))
-                    .lineLimit(1)
-                Text(file.path)
-                    .font(.system(size: 10))
-                    .foregroundColor(.white.opacity(0.35))
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            Text(file.category.displayName)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(color.opacity(0.5))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(color.opacity(0.06))
-                )
-            
-            Text(ByteFormatter.string(from: file.size))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(.white.opacity(0.6))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(file.isSelected ? color.opacity(0.04) : Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.white.opacity(0.04), lineWidth: 0.5)
-                )
-        )
-    }
-}
-
-struct AppItemRow: View {
-    @Bindable var app: AppBundle
-    let color: Color
-    
-    var body: some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: $app.isSelected)
-                .toggleStyle(.checkbox)
-                .controlSize(.small)
-            
-            Image(systemName: "app.fill")
-                .font(.system(size: 14))
-                .foregroundColor(color.opacity(0.7))
-                .frame(width: 20)
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text(app.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
-                if !app.version.isEmpty {
-                    Text(app.version)
-                        .font(.system(size: 10))
+                VStack(spacing: 4) {
+                    Text(ByteFormatter.string(from: viewModel.spaceReclaimed))
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("Space Reclaimed")
+                        .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.35))
                 }
             }
+            .padding(.vertical, 20)
+            .padding(.horizontal, 32)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                    )
+            )
+            .opacity(appear ? 1 : 0)
+            .offset(y: appear ? 0 : 15)
             
             Spacer()
             
-            if !app.leftoverFiles.isEmpty {
-                Text("+\(app.leftoverFiles.count) leftovers")
-                    .font(.system(size: 10))
-                    .foregroundColor(.orange.opacity(0.7))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.orange.opacity(0.08))
-                    )
+            Button(action: { viewModel.reset() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13))
+                    Text("Scan Again")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.green.opacity(0.2))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                        )
+                )
             }
-            
-            Text(ByteFormatter.string(from: app.totalSize))
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundColor(.white.opacity(0.6))
+            .buttonStyle(.plain)
+            .padding(.bottom, 20)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(app.isSelected ? color.opacity(0.04) : Color.clear)
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.15)) {
+                appear = true
+            }
+        }
     }
 }

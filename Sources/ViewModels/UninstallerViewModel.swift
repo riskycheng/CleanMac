@@ -1,16 +1,25 @@
 import SwiftUI
 
+enum UninstallerState {
+    case idle
+    case scanning
+    case reviewing
+    case uninstalling
+    case complete
+}
+
 @MainActor
 @Observable
 final class UninstallerViewModel {
-    var isScanning = false
-    var isUninstalling = false
-    var scanComplete = false
+    var state: UninstallerState = .idle
     var apps: [AppBundle] = []
     var scanProgress: Double = 0
     var scanStage: String = ""
+    var scanLog: [String] = []
     var uninstallProgress: Double = 0
     var uninstallStage: String = ""
+    var itemsRemoved: Int = 0
+    var spaceReclaimed: Int64 = 0
     
     var totalSize: Int64 {
         apps.reduce(0) { $0 + $1.totalSize }
@@ -25,10 +34,10 @@ final class UninstallerViewModel {
     }
     
     func startScan() {
-        isScanning = true
-        scanComplete = false
+        state = .scanning
         scanProgress = 0
         scanStage = "Initializing..."
+        scanLog.removeAll()
         apps.removeAll()
         
         Task {
@@ -49,6 +58,8 @@ final class UninstallerViewModel {
             await MainActor.run {
                 scanStage = stage
                 scanProgress = progress
+                scanLog.append("[\(timeString())] \(stage)")
+                if scanLog.count > 30 { scanLog.removeFirst() }
             }
             try? await Task.sleep(for: .milliseconds(300))
         }
@@ -59,9 +70,15 @@ final class UninstallerViewModel {
             apps = scannedApps
             scanProgress = 1.0
             scanStage = "Scan complete"
-            isScanning = false
-            scanComplete = true
+            scanLog.append("[\(timeString())] Scan complete — \(apps.count) apps found")
+            state = .reviewing
         }
+    }
+    
+    private func timeString() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter.string(from: Date())
     }
     
     func toggleAll() {
@@ -75,9 +92,11 @@ final class UninstallerViewModel {
         let selected = apps.filter { $0.isSelected }
         guard !selected.isEmpty else { return }
         
-        isUninstalling = true
+        state = .uninstalling
         uninstallProgress = 0
         uninstallStage = "Starting uninstall..."
+        itemsRemoved = 0
+        spaceReclaimed = 0
         
         Task {
             let total = selected.count
@@ -87,17 +106,19 @@ final class UninstallerViewModel {
                     uninstallProgress = Double(index) / Double(total)
                 }
                 
-                // Move app bundle to trash
                 do {
                     try FileManager.default.trashItem(at: app.url, resultingItemURL: nil)
+                    spaceReclaimed += app.size
+                    itemsRemoved += 1
                 } catch {
                     print("Failed to trash app: \(error)")
                 }
                 
-                // Move leftovers to trash
                 for leftover in app.leftoverFiles {
                     do {
                         try FileManager.default.trashItem(at: leftover, resultingItemURL: nil)
+                        let size = (try? FileManager.default.attributesOfItem(atPath: leftover.path)[.size] as? Int64) ?? 0
+                        spaceReclaimed += size
                     } catch {
                         print("Failed to trash leftover: \(error)")
                     }
@@ -110,8 +131,18 @@ final class UninstallerViewModel {
                 apps.removeAll { $0.isSelected }
                 uninstallProgress = 1.0
                 uninstallStage = "Uninstall complete"
-                isUninstalling = false
+                state = .complete
             }
         }
+    }
+    
+    func reset() {
+        state = .idle
+        scanProgress = 0
+        uninstallProgress = 0
+        scanLog.removeAll()
+        apps.removeAll()
+        itemsRemoved = 0
+        spaceReclaimed = 0
     }
 }
