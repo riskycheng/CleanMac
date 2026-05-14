@@ -73,22 +73,20 @@ struct JunkReviewView: View {
     }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                // Headline
-                VStack(spacing: 6) {
+        VStack(spacing: 0) {
+            // Fixed top section
+            VStack(spacing: 16) {
+                VStack(spacing: 4) {
                     Text("\(ByteFormatter.string(from: viewModel.totalSize)) reclaimable")
-                        .font(.system(size: 26, weight: .bold))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundColor(.white)
                     Text("Found \(viewModel.junkFiles.count) junk files")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.45))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.35))
                 }
-                .padding(.top, 12)
+                .padding(.top, 16)
                 
-                // Sunburst + Legend layout
-                HStack(spacing: 20) {
-                    // Sunburst chart
+                HStack(spacing: 24) {
                     SunburstChartView(
                         segments: sunburstSegments,
                         centerTitle: ByteFormatter.string(from: viewModel.totalSize),
@@ -100,14 +98,13 @@ struct JunkReviewView: View {
                             }
                         }
                     )
-                    .frame(maxWidth: 380, maxHeight: 380)
+                    .frame(width: 340, height: 340)
                     
-                    // Legend
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Breakdown")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.5))
-                            .padding(.bottom, 8)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white.opacity(0.4))
+                            .padding(.bottom, 6)
                         
                         SunburstLegendView(
                             segments: sunburstSegments,
@@ -120,66 +117,80 @@ struct JunkReviewView: View {
                             }
                         )
                     }
-                    .frame(maxWidth: 280, maxHeight: 380)
+                    .frame(width: 260, height: 340)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 20)
-                
-                // Selected segment detail
-                if let index = selectedSegmentIndex,
-                   index < sunburstSegments.count,
-                   !selectedSegmentFiles.isEmpty {
-                    SunburstDetailPanel(
-                        segment: sunburstSegments[index],
-                        files: selectedSegmentFiles
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .padding(.horizontal, 20)
-                }
-                
-                // Action buttons
-                HStack(spacing: 14) {
-                    Button("Cancel") {
-                        viewModel.reset()
-                    }
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.5))
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.white.opacity(0.04))
-                    )
-                    .buttonStyle(.plain)
-                    
-                    let selected = viewModel.junkFiles.filter { $0.isSelected }
-                    Button(action: { viewModel.cleanSelected() }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 13))
-                            Text("Clean \(ByteFormatter.string(from: selected.reduce(0) { $0 + $1.size }))")
-                                .font(.system(size: 14, weight: .semibold))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(selected.isEmpty ? Color.white.opacity(0.06) : Color.green.opacity(0.25))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(selected.isEmpty ? Color.white.opacity(0.08) : Color.green.opacity(0.4), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(selected.isEmpty)
-                    .opacity(selected.isEmpty ? 0.5 : 1.0)
-                }
-                .padding(.top, 8)
-                .padding(.bottom, 16)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            
+            // Scrollable detail section
+            if selectedSegmentIndex != nil {
+                ScrollView(showsIndicators: true) {
+                    VStack(spacing: 16) {
+                        if let index = selectedSegmentIndex,
+                           index < sunburstSegments.count,
+                           !selectedSegmentFiles.isEmpty {
+                            SunburstDetailPanel(
+                                segment: sunburstSegments[index],
+                                files: selectedSegmentFiles
+                            )
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                        
+                        actionButtons
+                            .padding(.bottom, 16)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                }
+            } else {
+                Spacer()
+                actionButtons
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 16)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var actionButtons: some View {
+        HStack(spacing: 14) {
+            Button("Cancel") {
+                viewModel.reset()
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(.white.opacity(0.45))
+            .padding(.horizontal, 22)
+            .padding(.vertical, 11)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.white.opacity(0.04))
+            )
+            .buttonStyle(.plain)
+            
+            let selected = viewModel.junkFiles.filter { $0.isSelected }
+            Button(action: { viewModel.cleanSelected() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 12))
+                    Text("Clean \(ByteFormatter.string(from: selected.reduce(0) { $0 + $1.size }))")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 11)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(selected.isEmpty ? Color.white.opacity(0.05) : Color.green.opacity(0.22))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(selected.isEmpty ? Color.white.opacity(0.06) : Color.green.opacity(0.35), lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(selected.isEmpty)
+            .opacity(selected.isEmpty ? 0.4 : 1.0)
         }
     }
 }

@@ -1,9 +1,9 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case auto = "Auto Clean"
-    case junkCleaner = "Junk Cleaner"
-    case appUninstaller = "Uninstaller"
+    case auto = "Auto"
+    case junkCleaner = "Junk"
+    case appUninstaller = "Apps"
     
     var id: String { rawValue }
     
@@ -14,72 +14,68 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .appUninstaller: return "xmark.app"
         }
     }
+    
+    var fullTitle: String {
+        switch self {
+        case .auto: return "Auto Clean"
+        case .junkCleaner: return "Junk Cleaner"
+        case .appUninstaller: return "Uninstaller"
+        }
+    }
 }
 
 struct SidebarView: View {
     @Binding var selection: SidebarItem
-    @State private var hoveredItem: SidebarItem? = nil
     
     var body: some View {
         VStack(spacing: 0) {
-            // Logo area
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.green.opacity(0.8))
-                    .frame(width: 28, height: 28)
-                
-                Text("CleanMac")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            // Logo
+            Image(systemName: "sparkles")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.green.opacity(0.9), .mint.opacity(0.7)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 44, height: 44)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
             
             Divider()
                 .background(Color.white.opacity(0.06))
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 ForEach(SidebarItem.allCases) { item in
-                    SidebarRow(
+                    SidebarIconCell(
                         item: item,
-                        isSelected: selection == item,
-                        isHovered: hoveredItem == item
+                        isSelected: selection == item
                     ) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             selection = item
-                        }
-                    }
-                    .onHover { isHover in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            hoveredItem = isHover ? item : nil
                         }
                     }
                 }
             }
-            .padding(.horizontal, 10)
             
             Spacer()
             
-            // Bottom status
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Circle()
-                    .fill(Color.green.opacity(0.6))
+                    .fill(Color.green.opacity(0.5))
                     .frame(width: 5, height: 5)
-                
                 Text("Ready")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.35))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.3))
             }
             .padding(.bottom, 16)
         }
-        .frame(width: 200)
+        .frame(width: 90)
         .background(
-            Color.black.opacity(0.3)
+            Color.black.opacity(0.25)
                 .overlay(
                     VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
                         .opacity(0.3)
@@ -88,41 +84,86 @@ struct SidebarView: View {
     }
 }
 
-struct SidebarRow: View {
+struct SidebarIconCell: View {
     let item: SidebarItem
     let isSelected: Bool
-    let isHovered: Bool
     let action: () -> Void
+    
+    @State private var isHovered = false
+    @State private var titleVisible = false
     
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: item.icon)
-                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.45))
-                    .frame(width: 22, height: 22)
-                
-                Text(item.rawValue)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.5))
-                
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
+            ZStack {
+                // Selection glow background
+                RoundedRectangle(cornerRadius: 14)
                     .fill(isSelected
-                          ? Color.white.opacity(0.1)
+                          ? Color.green.opacity(0.08)
                           : (isHovered ? Color.white.opacity(0.04) : Color.clear))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? Color.green.opacity(0.25) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(isSelected ? Color.green.opacity(0.2) : Color.clear, lineWidth: 1)
+                    )
+                
+                VStack(spacing: 4) {
+                    // Icon
+                    ZStack {
+                        // Glow behind selected icon
+                        if isSelected {
+                            Circle()
+                                .fill(Color.green.opacity(0.15))
+                                .frame(width: 46, height: 46)
+                                .blur(radius: 8)
+                        }
+                        
+                        Image(systemName: item.icon)
+                            .font(.system(size: isSelected ? 26 : 24, weight: isSelected ? .semibold : .regular))
+                            .foregroundStyle(
+                                isSelected
+                                ? Color.white
+                                : Color.white.opacity(0.35)
+                            )
+                            .frame(width: 30, height: 30)
+                            .scaleEffect(isHovered && !isSelected ? 1.1 : 1.0)
+                    }
+                    .frame(height: 38)
+                    
+                    // Title - appears on hover/selection
+                    Text(item.fullTitle)
+                        .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                        .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.5))
+                        .lineLimit(1)
+                        .opacity(titleVisible ? 1 : 0)
+                        .offset(y: titleVisible ? 0 : 4)
+                }
+                .padding(.vertical, 10)
+                
+                // Active indicator - left bar
+                HStack {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.green)
+                        .frame(width: 3, height: isSelected ? 28 : 0)
+                        .padding(.leading, -32)
+                    Spacer()
+                }
+            }
+            .frame(width: 72)
         }
         .buttonStyle(.plain)
+        .onHover { hover in
+            isHovered = hover
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                titleVisible = hover || isSelected
+            }
+        }
+        .onAppear {
+            titleVisible = isSelected
+        }
+        .onChange(of: isSelected) { _, new in
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                titleVisible = new || isHovered
+            }
+        }
     }
 }
 

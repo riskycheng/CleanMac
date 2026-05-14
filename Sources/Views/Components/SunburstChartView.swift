@@ -12,6 +12,8 @@ struct SunburstSegment: Identifiable, Equatable {
     }
 }
 
+// MARK: - Sunburst Chart
+
 struct SunburstChartView: View {
     let segments: [SunburstSegment]
     let centerTitle: String
@@ -28,7 +30,7 @@ struct SunburstChartView: View {
     
     private var normalizedSegments: [(segment: SunburstSegment, startAngle: Double, endAngle: Double, percentage: Double)] {
         var result: [(SunburstSegment, Double, Double, Double)] = []
-        var currentAngle: Double = -90 // Start from top
+        var currentAngle: Double = -90
         let total = Double(max(totalSize, 1))
         
         for segment in segments {
@@ -44,118 +46,168 @@ struct SunburstChartView: View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-            let outerRadius = size * 0.42
-            let innerRadius = size * 0.18
+            let outerRadius = size * 0.44
+            let innerRadius = size * 0.24
+            let gapAngle: Double = 1.5 // degrees between wedges
             
             ZStack {
-                // Background subtle rings
-                ForEach(0..<3) { i in
+                // Subtle concentric rings for depth
+                ForEach(0..<4) { i in
                     Circle()
-                        .stroke(Color.white.opacity(0.02), lineWidth: 0.5)
-                        .frame(width: (innerRadius + outerRadius) / 2 * CGFloat(i + 1) * 0.8)
+                        .stroke(Color.white.opacity(0.015 + Double(i) * 0.008), lineWidth: 0.5)
+                        .frame(width: innerRadius * 2 + CGFloat(i) * (outerRadius - innerRadius) * 0.5)
                 }
                 
-                // Sunburst wedges
+                // Glow behind chart
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                selectedIndex != nil
+                                ? segments[safe: selectedIndex!]?.color.opacity(0.08) ?? Color.white.opacity(0.03)
+                                : Color.white.opacity(0.02),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: innerRadius,
+                            endRadius: outerRadius + 30
+                        )
+                    )
+                    .frame(width: (outerRadius + 30) * 2, height: (outerRadius + 30) * 2)
+                
                 Canvas { context, _ in
                     let normalized = normalizedSegments
                     
                     for (index, item) in normalized.enumerated() {
                         let isSelected = selectedIndex == index
                         let isHovered = hoveredIndex == index
-                        let expand: CGFloat = isSelected ? 6 : (isHovered ? 3 : 0)
+                        let expand: CGFloat = isSelected ? 8 : (isHovered ? 4 : 0)
                         
-                        let path = wedgePath(
+                        let startA = item.1 + (gapAngle / 2)
+                        let endA = item.2 - (gapAngle / 2)
+                        
+                        guard endA > startA else { continue }
+                        
+                        // Main wedge path
+                        _ = wedgePath(
                             center: center,
                             innerRadius: innerRadius + expand,
                             outerRadius: outerRadius + expand,
-                            startAngle: item.1,
-                            endAngle: item.2
+                            startAngle: startA,
+                            endAngle: endA
                         )
                         
-                        // Main fill with subtle gradient
-                        var fillColor = item.0.color
-                        if isSelected {
-                            fillColor = fillColor.opacity(0.95)
-                        } else if isHovered {
-                            fillColor = fillColor.opacity(0.85)
-                        } else {
-                            fillColor = fillColor.opacity(0.65)
+                        // Gradient fill for 3D depth
+                        let baseColor = item.0.color
+                        
+                        // Draw gradient wedge using multiple thin arcs
+                        let steps = 24
+                        for s in 0..<steps {
+                            let t0 = Double(s) / Double(steps)
+                            let t1 = Double(s + 1) / Double(steps)
+                            let r0 = innerRadius + expand + (outerRadius - innerRadius) * CGFloat(t0)
+                            let r1 = innerRadius + expand + (outerRadius - innerRadius) * CGFloat(t1)
+                            
+                            let interpColor = baseColor.opacity(
+                                isSelected
+                                ? 0.95 - t0 * 0.35
+                                : 0.8 - t0 * 0.4
+                            )
+                            
+                            let bandPath = wedgePath(
+                                center: center,
+                                innerRadius: r0,
+                                outerRadius: r1,
+                                startAngle: startA + 0.3,
+                                endAngle: endA - 0.3
+                            )
+                            context.fill(bandPath, with: .color(interpColor))
                         }
                         
-                        context.fill(path, with: .color(fillColor))
-                        
-                        // Inner highlight arc for depth
-                        let innerArc = wedgePath(
+                        // Highlight arc at outer edge
+                        let highlightPath = wedgePath(
                             center: center,
-                            innerRadius: innerRadius + expand,
-                            outerRadius: innerRadius + expand + 2,
-                            startAngle: item.1,
-                            endAngle: item.2
+                            innerRadius: outerRadius + expand - 3,
+                            outerRadius: outerRadius + expand,
+                            startAngle: startA + 0.5,
+                            endAngle: endA - 0.5
                         )
-                        context.fill(innerArc, with: .color(item.0.color.opacity(0.4)))
+                        context.fill(highlightPath, with: .color(baseColor.opacity(0.5)))
                         
-                        // Subtle outer glow for selected
-                        if isSelected || isHovered {
+                        // Shadow/glow for selected
+                        if isSelected {
                             let glowPath = wedgePath(
                                 center: center,
-                                innerRadius: innerRadius + expand - 1,
-                                outerRadius: outerRadius + expand + 2,
-                                startAngle: item.1,
-                                endAngle: item.2
+                                innerRadius: innerRadius + expand - 2,
+                                outerRadius: outerRadius + expand + 4,
+                                startAngle: startA - 0.5,
+                                endAngle: endA + 0.5
                             )
-                            context.stroke(glowPath, with: .color(item.0.color.opacity(0.5)), lineWidth: 1.5)
+                            context.stroke(glowPath, with: .color(baseColor.opacity(0.35)), lineWidth: 2)
                         }
-                        
-                        // Separator lines
-                        let sepPath = separatorPath(
-                            center: center,
-                            innerRadius: innerRadius + expand,
-                            outerRadius: outerRadius + expand,
-                            angle: item.1
-                        )
-                        context.stroke(sepPath, with: .color(Color.black.opacity(0.4)), lineWidth: 1.2)
                     }
                     
-                    // Final separator
+                    // Separators
+                    for (_, item) in normalizedSegments.enumerated() {
+                        let sepPath = separatorPath(
+                            center: center,
+                            innerRadius: innerRadius - 2,
+                            outerRadius: outerRadius + 2,
+                            angle: item.1
+                        )
+                        context.stroke(sepPath, with: .color(Color.black.opacity(0.5)), lineWidth: 1.5)
+                    }
+                    
                     if let last = normalized.last {
                         let sepPath = separatorPath(
                             center: center,
-                            innerRadius: innerRadius,
-                            outerRadius: outerRadius,
+                            innerRadius: innerRadius - 2,
+                            outerRadius: outerRadius + 2,
                             angle: last.2
                         )
-                        context.stroke(sepPath, with: .color(Color.black.opacity(0.4)), lineWidth: 1.2)
+                        context.stroke(sepPath, with: .color(Color.black.opacity(0.5)), lineWidth: 1.5)
                     }
                 }
                 
                 // Center circle
                 ZStack {
+                    // Outer ring glow
+                    Circle()
+                        .stroke(
+                            selectedIndex != nil
+                            ? segments[safe: selectedIndex!]?.color.opacity(0.15) ?? Color.white.opacity(0.05)
+                            : Color.white.opacity(0.05),
+                            lineWidth: 1.5
+                        )
+                        .frame(width: innerRadius * 2 + 4, height: innerRadius * 2 + 4)
+                    
                     Circle()
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color(hex: "1a1a1a").opacity(0.95),
-                                    Color(hex: "121212").opacity(0.98)
+                                    Color(hex: "1c1c1e").opacity(0.98),
+                                    Color(hex: "141414").opacity(0.99)
                                 ],
                                 center: .center,
-                                startRadius: 5,
+                                startRadius: 2,
                                 endRadius: innerRadius
                             )
                         )
-                        .frame(width: innerRadius * 2 - 4, height: innerRadius * 2 - 4)
+                        .frame(width: innerRadius * 2 - 2, height: innerRadius * 2 - 2)
+                        .shadow(color: Color.black.opacity(0.5), radius: 8, x: 0, y: 4)
                     
                     Circle()
                         .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                        .frame(width: innerRadius * 2 - 4, height: innerRadius * 2 - 4)
+                        .frame(width: innerRadius * 2 - 2, height: innerRadius * 2 - 2)
                     
                     VStack(spacing: 2) {
                         Text(centerTitle)
-                            .font(.system(size: min(innerRadius * 0.35, 18), weight: .bold, design: .rounded))
+                            .font(.system(size: min(innerRadius * 0.32, 20), weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         
                         Text(centerSubtitle)
-                            .font(.system(size: min(innerRadius * 0.22, 11), weight: .medium))
-                            .foregroundColor(.white.opacity(0.4))
+                            .font(.system(size: min(innerRadius * 0.2, 11), weight: .medium))
+                            .foregroundColor(.white.opacity(0.35))
                     }
                 }
             }
@@ -164,79 +216,20 @@ struct SunburstChartView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onEnded { value in
-                        let dx = value.location.x - center.x
-                        let dy = value.location.y - center.y
-                        let distance = sqrt(dx * dx + dy * dy)
-                        
-                        guard distance >= innerRadius && distance <= outerRadius + 10 else {
-                            onSelect(nil)
-                            return
-                        }
-                        
-                        var angle = atan2(dy, dx) * 180 / .pi
-                        angle = (angle + 90 + 360).truncatingRemainder(dividingBy: 360)
-                        
-                        let normalized = normalizedSegments
-                        for (index, item) in normalized.enumerated() {
-                            let start = (item.1 + 90 + 360).truncatingRemainder(dividingBy: 360)
-                            let end = (item.2 + 90 + 360).truncatingRemainder(dividingBy: 360)
-                            
-                            let inRange: Bool
-                            if end < start {
-                                inRange = angle >= start || angle <= end
-                            } else {
-                                inRange = angle >= start && angle < end
-                            }
-                            
-                            if inRange {
-                                onSelect(selectedIndex == index ? nil : index)
-                                return
-                            }
-                        }
-                        onSelect(nil)
+                        handleTap(at: value.location, center: center, innerRadius: innerRadius, outerRadius: outerRadius)
                     }
             )
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let location):
-                    let dx = location.x - center.x
-                    let dy = location.y - center.y
-                    let distance = sqrt(dx * dx + dy * dy)
-                    
-                    guard distance >= innerRadius - 5 && distance <= outerRadius + 10 else {
-                        hoveredIndex = nil
-                        return
-                    }
-                    
-                    var angle = atan2(dy, dx) * 180 / .pi
-                    angle = (angle + 90 + 360).truncatingRemainder(dividingBy: 360)
-                    
-                    let normalized = normalizedSegments
-                    for (index, item) in normalized.enumerated() {
-                        let start = (item.1 + 90 + 360).truncatingRemainder(dividingBy: 360)
-                        let end = (item.2 + 90 + 360).truncatingRemainder(dividingBy: 360)
-                        
-                        let inRange: Bool
-                        if end < start {
-                            inRange = angle >= start || angle <= end
-                        } else {
-                            inRange = angle >= start && angle < end
-                        }
-                        
-                        if inRange {
-                            hoveredIndex = index
-                            return
-                        }
-                    }
-                    hoveredIndex = nil
-                    
+                    handleHover(at: location, center: center, innerRadius: innerRadius, outerRadius: outerRadius)
                 case .ended:
                     hoveredIndex = nil
                 }
             }
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 0.8).delay(0.2)) {
+            withAnimation(.easeOut(duration: 1.0).delay(0.15)) {
                 animationProgress = 1.0
             }
         }
@@ -246,6 +239,72 @@ struct SunburstChartView: View {
                 animationProgress = 1.0
             }
         }
+    }
+    
+    private func handleTap(at point: CGPoint, center: CGPoint, innerRadius: CGFloat, outerRadius: CGFloat) {
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let distance = sqrt(dx * dx + dy * dy)
+        
+        guard distance >= innerRadius - 10 && distance <= outerRadius + 15 else {
+            onSelect(nil)
+            return
+        }
+        
+        var angle = atan2(dy, dx) * 180 / .pi
+        angle = (angle + 90 + 360).truncatingRemainder(dividingBy: 360)
+        
+        let normalized = normalizedSegments
+        for (index, item) in normalized.enumerated() {
+            let start = (item.1 + 90 + 360).truncatingRemainder(dividingBy: 360)
+            let end = (item.2 + 90 + 360).truncatingRemainder(dividingBy: 360)
+            
+            let inRange: Bool
+            if end < start {
+                inRange = angle >= start || angle <= end
+            } else {
+                inRange = angle >= start && angle < end
+            }
+            
+            if inRange {
+                onSelect(selectedIndex == index ? nil : index)
+                return
+            }
+        }
+        onSelect(nil)
+    }
+    
+    private func handleHover(at point: CGPoint, center: CGPoint, innerRadius: CGFloat, outerRadius: CGFloat) {
+        let dx = point.x - center.x
+        let dy = point.y - center.y
+        let distance = sqrt(dx * dx + dy * dy)
+        
+        guard distance >= innerRadius - 10 && distance <= outerRadius + 15 else {
+            hoveredIndex = nil
+            return
+        }
+        
+        var angle = atan2(dy, dx) * 180 / .pi
+        angle = (angle + 90 + 360).truncatingRemainder(dividingBy: 360)
+        
+        let normalized = normalizedSegments
+        for (index, item) in normalized.enumerated() {
+            let start = (item.1 + 90 + 360).truncatingRemainder(dividingBy: 360)
+            let end = (item.2 + 90 + 360).truncatingRemainder(dividingBy: 360)
+            
+            let inRange: Bool
+            if end < start {
+                inRange = angle >= start || angle <= end
+            } else {
+                inRange = angle >= start && angle < end
+            }
+            
+            if inRange {
+                hoveredIndex = index
+                return
+            }
+        }
+        hoveredIndex = nil
     }
     
     private func wedgePath(center: CGPoint, innerRadius: CGFloat, outerRadius: CGFloat, startAngle: Double, endAngle: Double) -> Path {
@@ -308,8 +367,7 @@ struct SunburstLegendView: View {
                     LegendRow(
                         segment: segment,
                         percentage: Double(segment.size) / Double(max(totalSize, 1)),
-                        isSelected: selectedIndex == index,
-                        isOthers: false
+                        isSelected: selectedIndex == index
                     )
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -326,126 +384,313 @@ struct LegendRow: View {
     let segment: SunburstSegment
     let percentage: Double
     let isSelected: Bool
-    let isOthers: Bool
     @State private var isHovered = false
     
     var body: some View {
         HStack(spacing: 10) {
-            // Color dot
-            Circle()
-                .fill(segment.color.opacity(isSelected ? 1.0 : 0.7))
-                .frame(width: 8, height: 8)
+            // Color indicator
+            ZStack {
+                Circle()
+                    .fill(segment.color.opacity(isSelected ? 0.25 : 0.12))
+                    .frame(width: 22, height: 22)
+                
+                Circle()
+                    .fill(segment.color)
+                    .frame(width: 8, height: 8)
+            }
             
             // Icon
             Image(systemName: segment.icon)
-                .font(.system(size: 12))
-                .foregroundColor(segment.color.opacity(0.7))
-                .frame(width: 16, height: 16)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(segment.color.opacity(isSelected ? 0.9 : 0.6))
+                .frame(width: 18, height: 18)
             
             // Name
             Text(segment.name)
-                .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                .foregroundColor(isSelected ? .white : .white.opacity(0.6))
+                .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
+                .foregroundColor(isSelected ? .white : .white.opacity(0.65))
                 .lineLimit(1)
             
             Spacer()
             
-            // Percentage
+            // Percentage bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.05))
+                        .frame(width: 40, height: 4)
+                    
+                    Capsule()
+                        .fill(segment.color.opacity(isSelected ? 0.8 : 0.5))
+                        .frame(width: max(4, CGFloat(percentage) * 40), height: 4)
+                }
+            }
+            .frame(width: 40, height: 12)
+            
+            // Percentage text
             Text(String(format: "%.1f%%", percentage * 100))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(.white.opacity(0.35))
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundColor(isSelected ? segment.color.opacity(0.9) : .white.opacity(0.3))
+                .frame(width: 42, alignment: .trailing)
             
             // Size
             Text(ByteFormatter.string(from: segment.size))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(isSelected ? .white.opacity(0.8) : .white.opacity(0.4))
-                .frame(minWidth: 60, alignment: .trailing)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(isSelected ? .white.opacity(0.85) : .white.opacity(0.45))
+                .frame(minWidth: 64, alignment: .trailing)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? segment.color.opacity(0.12) : (isHovered ? Color.white.opacity(0.03) : Color.clear))
+                .fill(isSelected
+                      ? segment.color.opacity(0.1)
+                      : (isHovered ? Color.white.opacity(0.03) : Color.clear))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? segment.color.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isSelected ? segment.color.opacity(0.25) : Color.clear, lineWidth: 1)
         )
         .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.15), value: isSelected)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 }
 
-// MARK: - Detail Panel for selected segment
+// MARK: - Detail Panel
 
 struct SunburstDetailPanel: View {
     let segment: SunburstSegment
     let files: [JunkFile]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
             HStack {
-                HStack(spacing: 8) {
-                    Image(systemName: segment.icon)
-                        .font(.system(size: 14))
-                        .foregroundColor(segment.color)
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(segment.color.opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: segment.icon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(segment.color)
+                    }
                     
                     Text(segment.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.white)
                 }
                 
                 Spacer()
                 
-                Text("\(files.count) items · \(ByteFormatter.string(from: files.reduce(0) { $0 + $1.size }))")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.35))
+                HStack(spacing: 6) {
+                    Text("\(files.count)")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("items")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.35))
+                    
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.2))
+                    
+                    Text(ByteFormatter.string(from: files.reduce(0) { $0 + $1.size }))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundColor(segment.color)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                segment.color.opacity(0.04)
+            )
             
             Divider().background(Color.white.opacity(0.06))
             
-            LazyVStack(spacing: 3) {
-                ForEach(files.prefix(30)) { file in
-                    @Bindable var bindableFile = file
-                    HStack {
-                        Toggle("", isOn: $bindableFile.isSelected)
-                            .toggleStyle(.checkbox)
-                            .controlSize(.small)
-                        
-                        Text(file.name)
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.6))
-                            .lineLimit(1)
-                        
-                        Spacer()
-                        
-                        Text(ByteFormatter.string(from: file.size))
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundColor(.white.opacity(0.35))
+            // File list - scrollable
+            ScrollView(showsIndicators: true) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
+                        @Bindable var bindableFile = file
+                        FileListRow(file: file, color: segment.color, isEven: index % 2 == 0)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(file.isSelected ? segment.color.opacity(0.06) : Color.clear)
-                    )
                 }
+                .padding(.vertical, 4)
             }
+            .frame(maxHeight: 280)
         }
-        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white.opacity(0.02))
+                .fill(Color(hex: "161618").opacity(0.9))
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                        .stroke(segment.color.opacity(0.12), lineWidth: 1)
                 )
         )
     }
 }
 
-// MARK: - Category Color Extension
+struct FileListRow: View {
+    let file: JunkFile
+    let color: Color
+    let isEven: Bool
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(
+                get: { file.isSelected },
+                set: { file.isSelected = $0 }
+            ))
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+            
+            // File type indicator
+            Circle()
+                .fill(file.isSelected ? color.opacity(0.6) : color.opacity(0.2))
+                .frame(width: 6, height: 6)
+            
+            Text(file.name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundColor(file.isSelected ? .white.opacity(0.9) : .white.opacity(0.55))
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Text(ByteFormatter.string(from: file.size))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(file.isSelected ? color.opacity(0.8) : .white.opacity(0.3))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(
+            isEven
+            ? (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.015))
+            : (isHovered ? Color.white.opacity(0.04) : Color.clear)
+        )
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - App Detail Panel
+
+struct AppDetailPanel: View {
+    let apps: [AppBundle]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: "5B8DEF").opacity(0.15))
+                            .frame(width: 32, height: 32)
+                        Image(systemName: "app")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(hex: "5B8DEF"))
+                    }
+                    
+                    Text("Applications")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                HStack(spacing: 6) {
+                    Text("\(apps.count)")
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("apps")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.35))
+                    
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.2))
+                    
+                    Text(ByteFormatter.string(from: apps.reduce(0) { $0 + $1.totalSize }))
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(hex: "5B8DEF"))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                Color(hex: "5B8DEF").opacity(0.04)
+            )
+            
+            Divider().background(Color.white.opacity(0.06))
+            
+            ScrollView(showsIndicators: true) {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
+                        @Bindable var bindableApp = app
+                        AppListRow(app: app, isEven: index % 2 == 0)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(maxHeight: 280)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(hex: "161618").opacity(0.9))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color(hex: "5B8DEF").opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct AppListRow: View {
+    let app: AppBundle
+    let isEven: Bool
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            Toggle("", isOn: Binding(
+                get: { app.isSelected },
+                set: { app.isSelected = $0 }
+            ))
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+            
+            Circle()
+                .fill(app.isSelected ? Color(hex: "5B8DEF").opacity(0.6) : Color(hex: "5B8DEF").opacity(0.2))
+                .frame(width: 6, height: 6)
+            
+            Text(app.name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundColor(app.isSelected ? .white.opacity(0.9) : .white.opacity(0.55))
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Text(ByteFormatter.string(from: app.totalSize))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(app.isSelected ? Color(hex: "5B8DEF").opacity(0.8) : .white.opacity(0.3))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(
+            isEven
+            ? (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.015))
+            : (isHovered ? Color.white.opacity(0.04) : Color.clear)
+        )
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Extensions
+
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
 
 extension JunkCategory {
     var chartColor: Color {
