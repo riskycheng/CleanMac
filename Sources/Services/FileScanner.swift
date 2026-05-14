@@ -9,7 +9,7 @@ enum FileScanner {
         let home = PathConstants.home
         
         // 1. User Caches
-        results += await scanDirectory(PathConstants.caches, type: .cache, maxDepth: 3)
+        results += await scanDirectory(PathConstants.caches, category: .caches, maxDepth: 3)
         
         // 2. System Caches (macOS system caches)
         let systemCaches = [
@@ -20,12 +20,12 @@ enum FileScanner {
         ]
         for cache in systemCaches {
             if fm.fileExists(atPath: cache.path) {
-                results += await scanDirectory(cache, type: .systemCache, maxDepth: 2)
+                results += await scanDirectory(cache, category: .systemCaches, maxDepth: 2)
             }
         }
         
         // 3. Logs
-        results += await scanDirectory(PathConstants.logs, type: .log, maxDepth: 3)
+        results += await scanDirectory(PathConstants.logs, category: .logs, maxDepth: 3)
         
         // 4. System Logs
         let systemLogPaths = [
@@ -35,12 +35,12 @@ enum FileScanner {
         ]
         for logPath in systemLogPaths {
             if fm.fileExists(atPath: logPath.path) {
-                results += await scanDirectory(logPath, type: .systemLog, maxDepth: 2)
+                results += await scanDirectory(logPath, category: .systemLogs, maxDepth: 2)
             }
         }
         
         // 5. Temporary files
-        results += await scanDirectory(PathConstants.tmp, type: .temp, maxDepth: 2)
+        results += await scanDirectory(PathConstants.tmp, category: .tempFiles, maxDepth: 2)
         let tempPaths = [
             URL(fileURLWithPath: "/tmp"),
             URL(fileURLWithPath: "/var/tmp"),
@@ -48,21 +48,21 @@ enum FileScanner {
         ]
         for temp in tempPaths {
             if fm.fileExists(atPath: temp.path) {
-                results += await scanDirectory(temp, type: .temp, maxDepth: 2)
+                results += await scanDirectory(temp, category: .tempFiles, maxDepth: 2)
             }
         }
         
         // 6. var/folders (macOS temp storage)
         let varFolders = home.appendingPathComponent("Library/Containers")
         if fm.fileExists(atPath: varFolders.path) {
-            results += await scanDirectory(varFolders, type: .temp, maxDepth: 2)
+            results += await scanDirectory(varFolders, category: .tempFiles, maxDepth: 2)
         }
         
         // 7. Broken downloads
         results += await scanBrokenDownloads(in: PathConstants.downloads)
         
         // 8. Trash
-        results += await scanDirectory(PathConstants.trash, type: .trash, maxDepth: 2)
+        results += await scanDirectory(PathConstants.trash, category: .trash, maxDepth: 2)
         
         // 9. Application Support (orphaned support files)
         results += await scanOrphanedSupportFiles()
@@ -79,7 +79,7 @@ enum FileScanner {
         return results.sorted { $0.size > $1.size }
     }
     
-    private static func scanDirectory(_ url: URL, type: JunkFile.JunkType, maxDepth: Int) async -> [JunkFile] {
+    private static func scanDirectory(_ url: URL, category: JunkCategory, maxDepth: Int) async -> [JunkFile] {
         var files: [JunkFile] = []
         let fm = FileManager.default
         
@@ -99,7 +99,13 @@ enum FileScanner {
                 let size = Int64(attrs.fileSize ?? 0)
                 
                 if !isDir, size > 0 {
-                    files.append(JunkFile(url: fileURL, size: size, type: type))
+                    files.append(JunkFile(
+                        name: fileURL.lastPathComponent,
+                        path: fileURL.path,
+                        url: fileURL,
+                        size: size,
+                        category: category
+                    ))
                 }
                 if files.count >= 5000 { break }
             } catch {
@@ -125,7 +131,13 @@ enum FileScanner {
                     let attrs = try fileURL.resourceValues(forKeys: [.fileSizeKey])
                     let size = Int64(attrs.fileSize ?? 0)
                     if size > 0 {
-                        files.append(JunkFile(url: fileURL, size: size, type: .download))
+                        files.append(JunkFile(
+                            name: fileURL.lastPathComponent,
+                            path: fileURL.path,
+                            url: fileURL,
+                            size: size,
+                            category: .brokenDownloads
+                        ))
                     }
                 } catch { }
             }
@@ -151,7 +163,13 @@ enum FileScanner {
                     }
                 }
                 if size > 0 {
-                    files.append(JunkFile(url: url, size: size, type: .orphanedSupport))
+                    files.append(JunkFile(
+                        name: url.lastPathComponent,
+                        path: url.path,
+                        url: url,
+                        size: size,
+                        category: .orphanedSupport
+                    ))
                 }
             }
         }
@@ -168,7 +186,13 @@ enum FileScanner {
                     }
                 }
                 if size > 0 {
-                    files.append(JunkFile(url: url, size: size, type: .orphanedSupport))
+                    files.append(JunkFile(
+                        name: url.lastPathComponent,
+                        path: url.path,
+                        url: url,
+                        size: size,
+                        category: .orphanedSupport
+                    ))
                 }
             }
         }
@@ -189,7 +213,7 @@ enum FileScanner {
         ]
         for path in safariPaths {
             if fm.fileExists(atPath: path.path) {
-                files += await scanDirectory(path, type: .browserCache, maxDepth: 2)
+                files += await scanDirectory(path, category: .browserCache, maxDepth: 2)
             }
         }
         
@@ -200,14 +224,14 @@ enum FileScanner {
         ]
         for path in chromePaths {
             if fm.fileExists(atPath: path.path) {
-                files += await scanDirectory(path, type: .browserCache, maxDepth: 2)
+                files += await scanDirectory(path, category: .browserCache, maxDepth: 2)
             }
         }
         
         // Firefox caches
         if let ffProfiles = try? fm.contentsOfDirectory(at: home.appendingPathComponent("Library/Caches/Firefox/Profiles"), includingPropertiesForKeys: nil) {
             for profile in ffProfiles {
-                files += await scanDirectory(profile, type: .browserCache, maxDepth: 2)
+                files += await scanDirectory(profile, category: .browserCache, maxDepth: 2)
             }
         }
         
@@ -229,7 +253,7 @@ enum FileScanner {
         
         for path in xcodePaths {
             if fm.fileExists(atPath: path.path) {
-                files += await scanDirectory(path, type: .xcode, maxDepth: 1)
+                files += await scanDirectory(path, category: .xcodeJunk, maxDepth: 1)
             }
         }
         
@@ -254,7 +278,7 @@ enum FileScanner {
         
         for path in paths {
             if fm.fileExists(atPath: path.path) {
-                files += await scanDirectory(path, type: .developerCache, maxDepth: 2)
+                files += await scanDirectory(path, category: .developerCache, maxDepth: 2)
             }
         }
         
@@ -291,32 +315,31 @@ enum FileScanner {
             }
         }
         
-        var bundleID: String?
-        var version: String?
+        var bundleID = ""
+        var version = ""
         let infoPlist = url.appendingPathComponent("Contents/Info.plist")
         if let plist = try? PropertyListSerialization.propertyList(from: Data(contentsOf: infoPlist), format: nil) as? [String: Any] {
-            bundleID = plist["CFBundleIdentifier"] as? String
-            version = plist["CFBundleShortVersionString"] as? String
+            bundleID = plist["CFBundleIdentifier"] as? String ?? ""
+            version = plist["CFBundleShortVersionString"] as? String ?? ""
         }
         
-        var leftovers: [AppBundle.LeftoverFile] = []
-        if let bid = bundleID {
-            leftovers += await findLeftovers(bundleID: bid, appName: name)
+        var leftoverURLs: [URL] = []
+        if !bundleID.isEmpty {
+            leftoverURLs += await findLeftoverURLs(bundleID: bundleID, appName: name)
         }
         
         return AppBundle(
             name: name,
-            bundleURL: url,
-            bundleIdentifier: bundleID,
+            bundleID: bundleID,
             version: version,
+            url: url,
             size: size,
-            lastUsed: nil,
-            leftovers: leftovers
+            leftoverFiles: leftoverURLs
         )
     }
     
-    private static func findLeftovers(bundleID: String, appName: String) async -> [AppBundle.LeftoverFile] {
-        var leftovers: [AppBundle.LeftoverFile] = []
+    private static func findLeftoverURLs(bundleID: String, appName: String) async -> [URL] {
+        var leftovers: [URL] = []
         let fm = FileManager.default
         let home = PathConstants.home
         
@@ -346,23 +369,11 @@ enum FileScanner {
                 }
                 
                 if shouldMatch {
-                    var size: Int64 = 0
-                    var isDir: ObjCBool = false
-                    if fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                        if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
-                            let allURLs = enumerator.allObjects as! [URL]
-                            for fileURL in allURLs {
-                                size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-                            }
-                        }
-                    } else {
-                        size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
-                    }
-                    leftovers.append(AppBundle.LeftoverFile(url: url, size: size))
+                    leftovers.append(url)
                 }
             }
         }
         
-        return leftovers.sorted { $0.size > $1.size }
+        return leftovers
     }
 }

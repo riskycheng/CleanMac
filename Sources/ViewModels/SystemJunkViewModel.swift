@@ -1,70 +1,109 @@
-import Foundation
 import SwiftUI
 
 @MainActor
 @Observable
 final class SystemJunkViewModel {
-    var files: [JunkFile] = []
     var isScanning = false
-    var scanComplete = false
     var isCleaning = false
-    var cleanedSize: Int64 = 0
-    var errorMessage: String?
-    
-    var totalSize: Int64 {
-        files.filter(\.isSelected).reduce(0) { $0 + $1.size }
-    }
+    var scanComplete = false
+    var junkFiles: [JunkFile] = []
+    var totalSize: Int64 = 0
+    var scanProgress: Double = 0
+    var scanStage: String = ""
+    var cleanProgress: Double = 0
+    var cleanStage: String = ""
     
     var selectedCount: Int {
-        files.filter(\.isSelected).count
+        junkFiles.filter { $0.isSelected }.count
+    }
+    
+    var allSelected: Bool {
+        junkFiles.allSatisfy { $0.isSelected }
     }
     
     func startScan() {
-        guard !isScanning else { return }
         isScanning = true
         scanComplete = false
-        files = []
-        cleanedSize = 0
+        scanProgress = 0
+        scanStage = "Initializing..."
+        junkFiles.removeAll()
         
-        Task { @MainActor in
-            let results = await FileScanner.scanSystemJunk()
-            self.files = results
-            self.isScanning = false
-            self.scanComplete = true
+        Task {
+            await runScanWithAnimation()
+        }
+    }
+    
+    private func runScanWithAnimation() async {
+        let stages = [
+            ("Scanning user caches...", 0.15),
+            ("Scanning system caches...", 0.30),
+            ("Scanning log files...", 0.45),
+            ("Scanning temporary files...", 0.55),
+            ("Scanning browser data...", 0.65),
+            ("Scanning Xcode artifacts...", 0.75),
+            ("Scanning developer caches...", 0.85),
+            ("Finalizing scan...", 0.95)
+        ]
+        
+        for (stage, progress) in stages {
+            await MainActor.run {
+                scanStage = stage
+                scanProgress = progress
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        
+        let files = await FileScanner.scanSystemJunk()
+        
+        await MainActor.run {
+            junkFiles = files
+            totalSize = junkFiles.reduce(0) { $0 + $1.size }
+            scanProgress = 1.0
+            scanStage = "Scan complete"
+            isScanning = false
+            scanComplete = true
+        }
+    }
+    
+    func toggleAll() {
+        let allSelected = junkFiles.allSatisfy { $0.isSelected }
+        for file in junkFiles {
+            file.isSelected = !allSelected
         }
     }
     
     func cleanSelected() {
-        let toClean = files.filter(\.isSelected)
-        guard !toClean.isEmpty else { return }
-        isCleaning = true
+        let selected = junkFiles.filter { $0.isSelected }
+        guard !selected.isEmpty else { return }
         
-        Task { @MainActor in
-            let urls = toClean.map(\.url)
-            var count = 0
-            for url in urls {
-                do {
-                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                    count += 1
-                } catch {
-                    print("Failed to trash \(url.path): \(error)")
+        isCleaning = true
+        cleanProgress = 0
+        cleanStage = "Starting cleanup..."
+        
+        Task {
+            let total = selected.count
+            for (index, file) in selected.enumerated() {
+                await MainActor.run {
+                    cleanStage = "Removing \(file.name)..."
+                    cleanProgress = Double(index) / Double(total)
                 }
+                
+                do {
+                    try FileManager.default.trashItem(at: file.url, resultingItemURL: nil)
+                } catch {
+                    print("Failed to trash: \(error)")
+                }
+                
+                try? await Task.sleep(for: .milliseconds(60))
             }
-            let cleaned = toClean.reduce(0) { $0 + $1.size }
             
-            self.files.removeAll { $0.isSelected }
-            self.cleanedSize += cleaned
-            self.isCleaning = false
+            await MainActor.run {
+                junkFiles.removeAll { $0.isSelected }
+                totalSize = junkFiles.reduce(0) { $0 + $1.size }
+                cleanProgress = 1.0
+                cleanStage = "Cleanup complete"
+                isCleaning = false
+            }
         }
-    }
-    
-    func toggleAll(_ select: Bool) {
-        for index in files.indices {
-            files[index].isSelected = select
-        }
-    }
-    
-    func groupedByType() -> [JunkFile.JunkType: [JunkFile]] {
-        Dictionary(grouping: files, by: { $0.type })
     }
 }

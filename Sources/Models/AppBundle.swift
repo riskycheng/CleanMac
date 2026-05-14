@@ -1,51 +1,31 @@
 import Foundation
 
-struct AppBundle: Identifiable, Hashable {
+@Observable
+class AppBundle: Identifiable {
     let id = UUID()
     let name: String
-    let bundleURL: URL
-    let bundleIdentifier: String?
-    let version: String?
+    let bundleID: String
+    let version: String
+    let url: URL
     let size: Int64
-    let lastUsed: Date?
+    let leftoverFiles: [URL]
     var isSelected: Bool = false
-    var leftovers: [LeftoverFile] = []
-    
-    struct LeftoverFile: Identifiable, Hashable {
-        let id = UUID()
-        let url: URL
-        let size: Int64
-        var isSelected: Bool = true
-        
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(id)
-        }
-        
-        static func == (lhs: LeftoverFile, rhs: LeftoverFile) -> Bool {
-            lhs.id == rhs.id
-        }
-    }
     
     var totalSize: Int64 {
-        size + leftovers.reduce(0) { $0 + $1.size }
+        let leftoverSize = leftoverFiles.reduce(Int64(0)) { sum, url in
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+            return sum + fileSize
+        }
+        return size + leftoverSize
     }
     
-    var formattedSize: String {
-        ByteFormatter.string(from: totalSize)
-    }
-    
-    var formattedLastUsed: String {
-        guard let date = lastUsed else { return "Unknown" }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    
-    static func == (lhs: AppBundle, rhs: AppBundle) -> Bool {
-        lhs.id == rhs.id
+    init(name: String, bundleID: String, version: String, url: URL, size: Int64, leftoverFiles: [URL], isSelected: Bool = false) {
+        self.name = name
+        self.bundleID = bundleID
+        self.version = version
+        self.url = url
+        self.size = size
+        self.leftoverFiles = leftoverFiles
+        self.isSelected = isSelected
     }
 }

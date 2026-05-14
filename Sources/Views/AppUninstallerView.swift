@@ -4,229 +4,229 @@ struct AppUninstallerView: View {
     @State private var viewModel = UninstallerViewModel()
     
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("App Uninstaller")
-                        .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("Find and completely uninstall applications with all leftover files")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-                Spacer()
-                
-                if viewModel.scanComplete && !viewModel.apps.isEmpty {
-                    Text("Selected: \(ByteFormatter.string(from: viewModel.selectedTotalSize))")
-                        .font(.callout.weight(.medium))
-                        .foregroundColor(Color(hex: "448AFF"))
-                }
-            }
-            .padding()
+        ZStack {
+            DataStreamView()
+                .opacity(viewModel.isScanning || viewModel.isUninstalling ? 0.12 : 0.04)
             
-            Divider()
-                .background(Color.white.opacity(0.1))
-            
-            if viewModel.isScanning {
-                Spacer()
+            ScrollView {
                 VStack(spacing: 20) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.15))
-                            .frame(width: 120, height: 120)
-                            .blur(radius: 20)
-                        ProgressView()
-                            .controlSize(.large)
-                            .scaleEffect(1.5)
-                            .tint(.white)
-                    }
-                    Text("Scanning applications...")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                Spacer()
-            } else if viewModel.apps.isEmpty && viewModel.scanComplete {
-                Spacer()
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 56))
-                        .foregroundColor(.green)
-                        .shadow(color: .green.opacity(0.4), radius: 15)
-                    Text("No Applications Found")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-                Spacer()
-            } else if !viewModel.apps.isEmpty {
-                List {
-                    ForEach($viewModel.apps) { $app in
-                        AppRow(app: $app)
-                    }
-                }
-                .listStyle(.inset)
-                .scrollContentBackground(.hidden)
-                
-                Divider()
-                    .background(Color.white.opacity(0.1))
-                
-                HStack(spacing: 16) {
-                    Button("Select All") {
-                        viewModel.selectAll()
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundColor(.white.opacity(0.8))
-                    
-                    Button("Deselect All") {
-                        viewModel.deselectAll()
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundColor(.white.opacity(0.8))
-                    
-                    Spacer()
-                    
-                    Text("\(viewModel.selectedApps.count) apps selected")
-                        .font(.callout)
-                        .foregroundColor(.white.opacity(0.6))
-                    
-                    Button("Uninstall Selected") {
-                        viewModel.uninstallSelected()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
-                    .disabled(viewModel.isUninstalling || viewModel.selectedApps.isEmpty)
-                }
-                .padding()
-            } else {
-                Spacer()
-                VStack(spacing: 20) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.15))
-                            .frame(width: 140, height: 140)
-                            .blur(radius: 25)
+                    // Header
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("App Uninstaller")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("Completely remove apps and their leftover files")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        Spacer()
                         
-                        Image(systemName: "app.badge.checkmark")
-                            .font(.system(size: 60))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color(hex: "448AFF").opacity(0.9), Color(hex: "448AFF").opacity(0.5)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .shadow(color: Color(hex: "448AFF").opacity(0.4), radius: 15)
+                        if viewModel.scanComplete {
+                            Button(viewModel.allSelected ? "Deselect All" : "Select All") {
+                                viewModel.toggleAll()
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.blue)
+                            .buttonStyle(.plain)
+                        }
                     }
                     
-                    VStack(spacing: 8) {
-                        Text("Ready to Scan")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(.white)
-                        Text("Find applications and their leftover files for complete removal.")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.6))
+                    if viewModel.isScanning {
+                        ScanningPanel(
+                            title: "Scanning Applications",
+                            stage: viewModel.scanStage,
+                            progress: viewModel.scanProgress,
+                            color: .blue
+                        )
+                    } else if viewModel.isUninstalling {
+                        ScanningPanel(
+                            title: "Uninstalling Apps",
+                            stage: viewModel.uninstallStage,
+                            progress: viewModel.uninstallProgress,
+                            color: .blue
+                        )
+                    } else if viewModel.scanComplete {
+                        // Summary
+                        GlassCard(accent: .blue) {
+                            HStack(spacing: 20) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(viewModel.apps.count) apps found")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    Text(ByteFormatter.string(from: viewModel.totalSize) + " total")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.blue)
+                                }
+                                Spacer()
+                                if viewModel.selectedCount > 0 {
+                                    GlowButton(
+                                        title: "Uninstall \(viewModel.selectedCount)",
+                                        icon: "xmark.app.fill",
+                                        color: .blue
+                                    ) {
+                                        viewModel.uninstallSelected()
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // App list
+                        LazyVStack(spacing: 6) {
+                            ForEach(viewModel.apps) { app in
+                                AppRow(app: app)
+                            }
+                        }
+                    } else {
+                        // Idle state
+                        VStack(spacing: 32) {
+                            Spacer().frame(height: 60)
+                            
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        RadialGradient(
+                                            colors: [.blue.opacity(0.15), .clear],
+                                            center: .center,
+                                            startRadius: 20,
+                                            endRadius: 100
+                                        )
+                                    )
+                                    .frame(width: 200, height: 200)
+                                
+                                Image(systemName: "app.badge.checkmark")
+                                    .font(.system(size: 64))
+                                    .foregroundStyle(.blue.opacity(0.8))
+                                    .shadow(color: .blue.opacity(0.3), radius: 15)
+                            }
+                            .frame(height: 200)
+                            
+                            VStack(spacing: 12) {
+                                Text("App Uninstaller")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.white)
+                                Text("Scan installed applications and remove them\ncompletely including all leftover files.")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white.opacity(0.4))
+                                    .multilineTextAlignment(.center)
+                            }
+                            
+                            GlowButton(
+                                title: "Scan Applications",
+                                icon: "magnifyingglass",
+                                color: .blue
+                            ) {
+                                viewModel.startScan()
+                            }
+                            
+                            Spacer()
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 400)
                     }
-                    
-                    Button("Scan Now") {
-                        viewModel.startScan()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding(.top, 8)
                 }
-                Spacer()
+                .padding(24)
             }
         }
     }
 }
 
 struct AppRow: View {
-    @Binding var app: AppBundle
+    @Bindable var app: AppBundle
+    @State private var expanded: Bool = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
                 Toggle("", isOn: $app.isSelected)
                     .toggleStyle(.checkbox)
-                    .labelsHidden()
+                    .controlSize(.small)
                 
                 Image(systemName: "app.fill")
-                    .font(.title2)
-                    .foregroundColor(Color(hex: "448AFF"))
-                    .frame(width: 40, height: 40)
-                    .background(Color(hex: "448AFF").opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .font(.system(size: 16))
+                    .foregroundColor(.blue.opacity(0.7))
+                    .frame(width: 24)
                 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(app.name)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    HStack(spacing: 8) {
-                        Text(app.version ?? "Unknown version")
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.6))
-                        if app.bundleIdentifier != nil {
-                            Text("•")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.4))
-                            Text(app.bundleIdentifier!)
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.4))
-                                .lineLimit(1)
-                        }
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                    if !app.version.isEmpty {
+                        Text(app.version)
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.35))
                     }
                 }
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(app.formattedSize)
-                        .font(.callout.weight(.medium).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.9))
-                    if !app.leftovers.isEmpty {
-                        Text("+ \(app.leftovers.count) leftover files")
-                            .font(.caption)
-                            .foregroundColor(.orange.opacity(0.8))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(hex: "448AFF").opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .padding()
-            .background(Color.white.opacity(0.05))
-            
-            if app.isSelected && !app.leftovers.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Leftover Files to Remove")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.white.opacity(0.5))
-                        .padding(.horizontal)
-                    
-                    ForEach($app.leftovers) { $leftover in
-                        HStack {
-                            Toggle("", isOn: $leftover.isSelected)
-                                .toggleStyle(.checkbox)
-                                .labelsHidden()
-                            Text(leftover.url.lastPathComponent)
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.8))
-                            Spacer()
-                            Text(ByteFormatter.string(from: leftover.size))
-                                .font(.caption.monospacedDigit())
-                                .foregroundColor(.white.opacity(0.5))
+                if !app.leftoverFiles.isEmpty {
+                    Button(action: { expanded.toggle() }) {
+                        HStack(spacing: 4) {
+                            Text("+\(app.leftoverFiles.count) leftovers")
+                                .font(.system(size: 10, weight: .medium))
+                            Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9))
                         }
-                        .padding(.horizontal)
+                        .foregroundColor(.orange.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.orange.opacity(0.08))
+                        )
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(.vertical, 8)
-                .background(Color.white.opacity(0.03))
+                
+                Text(ByteFormatter.string(from: app.totalSize))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(app.isSelected ? Color.blue.opacity(0.04) : Color.white.opacity(0.02))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
+                    )
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expanded.toggle()
+                }
+            }
+            
+            if expanded && !app.leftoverFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Leftover files found:")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.orange.opacity(0.6))
+                        .padding(.horizontal, 12)
+                        .padding(.top, 8)
+                    
+                    ForEach(app.leftoverFiles, id: \.self) { url in
+                        HStack {
+                            Image(systemName: "doc")
+                                .font(.system(size: 9))
+                                .foregroundColor(.white.opacity(0.3))
+                            Text(url.path)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.white.opacity(0.4))
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 12)
+                    }
+                    .padding(.bottom, 8)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.black.opacity(0.3))
+                )
+                .padding(.top, 4)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
     }
 }

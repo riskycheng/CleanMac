@@ -1,87 +1,117 @@
-import Foundation
 import SwiftUI
 
 @MainActor
 @Observable
 final class UninstallerViewModel {
-    var apps: [AppBundle] = []
     var isScanning = false
-    var scanComplete = false
     var isUninstalling = false
-    var uninstalledCount = 0
-    var freedSpace: Int64 = 0
-    var errorMessage: String?
+    var scanComplete = false
+    var apps: [AppBundle] = []
+    var scanProgress: Double = 0
+    var scanStage: String = ""
+    var uninstallProgress: Double = 0
+    var uninstallStage: String = ""
     
-    var selectedApps: [AppBundle] {
-        apps.filter(\.isSelected)
+    var totalSize: Int64 {
+        apps.reduce(0) { $0 + $1.totalSize }
     }
     
-    var selectedTotalSize: Int64 {
-        selectedApps.reduce(0) { $0 + $1.totalSize }
+    var selectedCount: Int {
+        apps.filter { $0.isSelected }.count
+    }
+    
+    var allSelected: Bool {
+        apps.allSatisfy { $0.isSelected }
     }
     
     func startScan() {
-        guard !isScanning else { return }
         isScanning = true
         scanComplete = false
-        apps = []
-        uninstalledCount = 0
-        freedSpace = 0
+        scanProgress = 0
+        scanStage = "Initializing..."
+        apps.removeAll()
         
-        Task { @MainActor in
-            let results = await FileScanner.scanApplications()
-            self.apps = results
-            self.isScanning = false
-            self.scanComplete = true
+        Task {
+            await runScanWithAnimation()
+        }
+    }
+    
+    private func runScanWithAnimation() async {
+        let stages = [
+            ("Scanning /Applications...", 0.20),
+            ("Scanning ~/Applications...", 0.40),
+            ("Reading app metadata...", 0.60),
+            ("Searching leftover files...", 0.80),
+            ("Finalizing scan...", 0.95)
+        ]
+        
+        for (stage, progress) in stages {
+            await MainActor.run {
+                scanStage = stage
+                scanProgress = progress
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        
+        let scannedApps = await FileScanner.scanApplications()
+        
+        await MainActor.run {
+            apps = scannedApps
+            scanProgress = 1.0
+            scanStage = "Scan complete"
+            isScanning = false
+            scanComplete = true
+        }
+    }
+    
+    func toggleAll() {
+        let allSelected = apps.allSatisfy { $0.isSelected }
+        for app in apps {
+            app.isSelected = !allSelected
         }
     }
     
     func uninstallSelected() {
-        let toUninstall = apps.filter(\.isSelected)
-        guard !toUninstall.isEmpty else { return }
-        isUninstalling = true
+        let selected = apps.filter { $0.isSelected }
+        guard !selected.isEmpty else { return }
         
-        Task { @MainActor in
-            var count = 0
-            var freed: Int64 = 0
-            
-            for app in toUninstall {
-                var urls: [URL] = [app.bundleURL]
-                urls += app.leftovers.filter(\.isSelected).map(\.url)
+        isUninstalling = true
+        uninstallProgress = 0
+        uninstallStage = "Starting uninstall..."
+        
+        Task {
+            let total = selected.count
+            for (index, app) in selected.enumerated() {
+                await MainActor.run {
+                    uninstallStage = "Uninstalling \(app.name)..."
+                    uninstallProgress = Double(index) / Double(total)
+                }
                 
-                for url in urls {
+                // Move app bundle to trash
+                do {
+                    try FileManager.default.trashItem(at: app.url, resultingItemURL: nil)
+                } catch {
+                    print("Failed to trash app: \(error)")
+                }
+                
+                // Move leftovers to trash
+                for leftover in app.leftoverFiles {
                     do {
-                        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                        freed += app.totalSize
+                        try FileManager.default.trashItem(at: leftover, resultingItemURL: nil)
                     } catch {
-                        print("Failed to uninstall \(app.name): \(error)")
+                        print("Failed to trash leftover: \(error)")
                     }
                 }
-                count += 1
+                
+                try? await Task.sleep(for: .milliseconds(100))
             }
             
-            self.apps.removeAll { $0.isSelected }
-            self.uninstalledCount += count
-            self.freedSpace += freed
-            self.isUninstalling = false
-        }
-    }
-    
-    func toggleAppSelection(_ app: AppBundle) {
-        if let index = apps.firstIndex(where: { $0.id == app.id }) {
-            apps[index].isSelected.toggle()
-        }
-    }
-    
-    func selectAll() {
-        for index in apps.indices {
-            apps[index].isSelected = true
-        }
-    }
-    
-    func deselectAll() {
-        for index in apps.indices {
-            apps[index].isSelected = false
+            await MainActor.run {
+                apps.removeAll { $0.isSelected }
+                uninstallProgress = 1.0
+                uninstallStage = "Uninstall complete"
+                isUninstalling = false
+            }
         }
     }
 }
