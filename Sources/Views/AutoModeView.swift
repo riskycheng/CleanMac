@@ -309,128 +309,243 @@ struct IdleView: View {
     }
 }
 
-// MARK: - Elegant Review View with 3D Icons & Expand
+// MARK: - Elegant Review View with Sunburst Chart
 
 struct ElegantReviewView: View {
     @Bindable var viewModel: AutoModeViewModel
-    @State private var expandedCategory: JunkCategory? = nil
-    @State private var cardAppears: [UUID: Bool] = [:]
+    @State private var selectedSegmentIndex: Int? = nil
     
-    var activeCategories: [JunkCategory] {
-        JunkCategory.allCases.filter { viewModel.categorySize($0) > 0 }
+    var sunburstSegments: [SunburstSegment] {
+        var segments: [SunburstSegment] = []
+        
+        for category in JunkCategory.allCases {
+            let size = viewModel.categorySize(category)
+            if size > 0 {
+                segments.append(SunburstSegment(
+                    name: category.displayName,
+                    size: size,
+                    color: category.chartColor,
+                    icon: category.icon
+                ))
+            }
+        }
+        
+        if viewModel.totalAppSize > 0 {
+            segments.append(SunburstSegment(
+                name: "Applications",
+                size: viewModel.totalAppSize,
+                color: Color(hex: "5B8DEF"),
+                icon: "app"
+            ))
+        }
+        
+        return segments.sorted { $0.size > $1.size }
+    }
+    
+    var selectedSegmentFiles: [JunkFile] {
+        guard let index = selectedSegmentIndex, index < sunburstSegments.count else { return [] }
+        let segment = sunburstSegments[index]
+        
+        if segment.name == "Applications" {
+            return []
+        }
+        
+        if let category = JunkCategory.allCases.first(where: { $0.displayName == segment.name }) {
+            return viewModel.filesInCategory(category)
+        }
+        return []
     }
     
     var body: some View {
-        ZStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Headline
-                    VStack(spacing: 6) {
-                        Text("\(ByteFormatter.string(from: viewModel.totalSize)) of junk found")
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Text("Found \(viewModel.totalItems) items that can be safely removed")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.4))
-                    }
-                    .padding(.top, 12)
+        ScrollView {
+            VStack(spacing: 20) {
+                // Headline
+                VStack(spacing: 6) {
+                    Text("\(ByteFormatter.string(from: viewModel.totalSize)) of junk found")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundColor(.white)
                     
-                    // Bento grid of visual category cards
-                    let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(Array(activeCategories.enumerated()), id: \.element) { index, category in
-                            VisualCategoryCard(
-                                category: category,
-                                size: viewModel.categorySize(category),
-                                count: viewModel.filesInCategory(category).count,
-                                isSelected: viewModel.filesInCategory(category).allSatisfy { $0.isSelected },
-                                isExpanded: expandedCategory == category,
-                                appearDelay: Double(index) * 0.08
-                            ) {
-                                if expandedCategory == category {
-                                    expandedCategory = nil
-                                } else {
-                                    expandedCategory = category
-                                }
-                            } onToggle: {
-                                let files = viewModel.filesInCategory(category)
-                                let allSelected = files.allSatisfy { $0.isSelected }
-                                for file in files {
-                                    file.isSelected = !allSelected
-                                }
+                    Text("Found \(viewModel.totalItems) items that can be safely removed")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .padding(.top, 12)
+                
+                // Sunburst + Legend layout
+                HStack(spacing: 20) {
+                    // Sunburst chart
+                    SunburstChartView(
+                        segments: sunburstSegments,
+                        centerTitle: ByteFormatter.string(from: viewModel.totalSize),
+                        centerSubtitle: "Total",
+                        selectedIndex: $selectedSegmentIndex,
+                        onSelect: { index in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedSegmentIndex = index
                             }
                         }
-                        
-                        // Apps card
-                        if !viewModel.apps.isEmpty {
-                            VisualAppCard(
-                                count: viewModel.apps.count,
-                                size: viewModel.totalAppSize,
-                                isSelected: viewModel.apps.allSatisfy { $0.isSelected },
-                                appearDelay: Double(activeCategories.count) * 0.08
-                            ) {
-                                viewModel.toggleAllApps()
-                            }
-                        }
-                    }
+                    )
+                    .frame(maxWidth: 380, maxHeight: 380)
                     
-                    // Expanded detail view
-                    if let cat = expandedCategory {
-                        CategoryDetailPanel(
-                            category: cat,
-                            files: viewModel.filesInCategory(cat)
+                    // Legend
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Breakdown")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding(.bottom, 8)
+                        
+                        SunburstLegendView(
+                            segments: sunburstSegments,
+                            totalSize: viewModel.totalSize,
+                            selectedIndex: $selectedSegmentIndex,
+                            onSelect: { index in
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedSegmentIndex = index
+                                }
+                            }
                         )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+                    .frame(maxWidth: 280, maxHeight: 380)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 20)
+                
+                // Selected segment detail
+                if let index = selectedSegmentIndex,
+                   index < sunburstSegments.count,
+                   !selectedSegmentFiles.isEmpty {
+                    SunburstDetailPanel(
+                        segment: sunburstSegments[index],
+                        files: selectedSegmentFiles
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.horizontal, 20)
+                }
+                
+                // Apps detail if apps segment selected
+                if selectedSegmentIndex != nil,
+                   let index = selectedSegmentIndex,
+                   index < sunburstSegments.count,
+                   sunburstSegments[index].name == "Applications",
+                   !viewModel.apps.isEmpty {
+                    AppDetailPanel(apps: viewModel.apps)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .padding(.horizontal, 20)
+                }
+                
+                // Action buttons
+                HStack(spacing: 14) {
+                    Button("Cancel") {
+                        viewModel.reset()
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.5))
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.white.opacity(0.04))
+                    )
+                    .buttonStyle(.plain)
                     
-                    // Action buttons
-                    HStack(spacing: 14) {
-                        Button("Cancel") {
-                            viewModel.reset()
+                    let selectedCount = viewModel.junkFiles.filter { $0.isSelected }.count + viewModel.apps.filter { $0.isSelected }.count
+                    let selectedSize = viewModel.junkFiles.filter { $0.isSelected }.reduce(0) { $0 + $1.size } + viewModel.apps.filter { $0.isSelected }.reduce(0) { $0 + $1.totalSize }
+                    
+                    Button(action: { viewModel.startCleanup() }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 13))
+                            Text("Clean \(ByteFormatter.string(from: selectedSize))")
+                                .font(.system(size: 14, weight: .semibold))
                         }
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-                        .padding(.horizontal, 22)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.white.opacity(0.04))
+                                .fill(selectedCount > 0 ? Color.green.opacity(0.25) : Color.white.opacity(0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .stroke(selectedCount > 0 ? Color.green.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
+                                )
                         )
-                        .buttonStyle(.plain)
-                        
-                        let selectedCount = viewModel.junkFiles.filter { $0.isSelected }.count + viewModel.apps.filter { $0.isSelected }.count
-                        let selectedSize = viewModel.junkFiles.filter { $0.isSelected }.reduce(0) { $0 + $1.size } + viewModel.apps.filter { $0.isSelected }.reduce(0) { $0 + $1.totalSize }
-                        
-                        Button(action: { viewModel.startCleanup() }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 13))
-                                Text("Clean \(ByteFormatter.string(from: selectedSize))")
-                                    .font(.system(size: 14, weight: .semibold))
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(selectedCount > 0 ? Color.green.opacity(0.25) : Color.white.opacity(0.06))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10)
-                                            .stroke(selectedCount > 0 ? Color.green.opacity(0.4) : Color.white.opacity(0.08), lineWidth: 1)
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(selectedCount == 0)
-                        .opacity(selectedCount > 0 ? 1.0 : 0.5)
                     }
-                    .padding(.top, 8)
-                    .padding(.bottom, 16)
+                    .buttonStyle(.plain)
+                    .disabled(selectedCount == 0)
+                    .opacity(selectedCount > 0 ? 1.0 : 0.5)
                 }
-                .padding(20)
+                .padding(.top, 8)
+                .padding(.bottom, 16)
+            }
+            .padding(20)
+        }
+    }
+}
+
+// MARK: - App Detail Panel
+
+struct AppDetailPanel: View {
+    let apps: [AppBundle]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: "app")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(hex: "5B8DEF"))
+                    
+                    Text("Applications")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                Text("\(apps.count) apps · \(ByteFormatter.string(from: apps.reduce(0) { $0 + $1.totalSize }))")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.35))
+            }
+            
+            Divider().background(Color.white.opacity(0.06))
+            
+            LazyVStack(spacing: 3) {
+                ForEach(apps.prefix(20)) { app in
+                    @Bindable var bindableApp = app
+                    HStack {
+                        Toggle("", isOn: $bindableApp.isSelected)
+                            .toggleStyle(.checkbox)
+                            .controlSize(.small)
+                        
+                        Text(app.name)
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                            .lineLimit(1)
+                        
+                        Spacer()
+                        
+                        Text(ByteFormatter.string(from: app.totalSize))
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(app.isSelected ? Color(hex: "5B8DEF").opacity(0.06) : Color.clear)
+                    )
+                }
             }
         }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white.opacity(0.02))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
     }
 }
 

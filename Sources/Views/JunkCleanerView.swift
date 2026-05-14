@@ -2,7 +2,6 @@ import SwiftUI
 
 struct JunkCleanerView: View {
     @State private var viewModel = SystemJunkViewModel()
-    @State private var expandedCategory: JunkCategory? = nil
     
     var body: some View {
         ZStack {
@@ -22,7 +21,7 @@ struct JunkCleanerView: View {
                     logLines: viewModel.scanLog
                 )
             case .reviewing:
-                JunkReviewView(viewModel: viewModel, expandedCategory: $expandedCategory)
+                JunkReviewView(viewModel: viewModel)
             case .cleaning:
                 ModuleCleaningView(
                     progress: viewModel.cleanProgress,
@@ -43,15 +42,40 @@ struct JunkCleanerView: View {
 
 struct JunkReviewView: View {
     @Bindable var viewModel: SystemJunkViewModel
-    @Binding var expandedCategory: JunkCategory?
+    @State private var selectedSegmentIndex: Int? = nil
     
-    var activeCategories: [JunkCategory] {
-        JunkCategory.allCases.filter { viewModel.categorySize($0) > 0 }
+    var sunburstSegments: [SunburstSegment] {
+        var segments: [SunburstSegment] = []
+        
+        for category in JunkCategory.allCases {
+            let size = viewModel.categorySize(category)
+            if size > 0 {
+                segments.append(SunburstSegment(
+                    name: category.displayName,
+                    size: size,
+                    color: category.chartColor,
+                    icon: category.icon
+                ))
+            }
+        }
+        
+        return segments.sorted { $0.size > $1.size }
+    }
+    
+    var selectedSegmentFiles: [JunkFile] {
+        guard let index = selectedSegmentIndex, index < sunburstSegments.count else { return [] }
+        let segment = sunburstSegments[index]
+        
+        if let category = JunkCategory.allCases.first(where: { $0.displayName == segment.name }) {
+            return viewModel.filesInCategory(category)
+        }
+        return []
     }
     
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                // Headline
                 VStack(spacing: 6) {
                     Text("\(ByteFormatter.string(from: viewModel.totalSize)) reclaimable")
                         .font(.system(size: 26, weight: .bold))
@@ -62,40 +86,58 @@ struct JunkReviewView: View {
                 }
                 .padding(.top, 12)
                 
-                let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(Array(activeCategories.enumerated()), id: \.element) { index, category in
-                        VisualCategoryCard(
-                            category: category,
-                            size: viewModel.categorySize(category),
-                            count: viewModel.filesInCategory(category).count,
-                            isSelected: viewModel.filesInCategory(category).allSatisfy { $0.isSelected },
-                            isExpanded: expandedCategory == category,
-                            appearDelay: Double(index) * 0.08
-                        ) {
-                            if expandedCategory == category {
-                                expandedCategory = nil
-                            } else {
-                                expandedCategory = category
-                            }
-                        } onToggle: {
-                            let files = viewModel.filesInCategory(category)
-                            let allSelected = files.allSatisfy { $0.isSelected }
-                            for file in files {
-                                file.isSelected = !allSelected
+                // Sunburst + Legend layout
+                HStack(spacing: 20) {
+                    // Sunburst chart
+                    SunburstChartView(
+                        segments: sunburstSegments,
+                        centerTitle: ByteFormatter.string(from: viewModel.totalSize),
+                        centerSubtitle: "Reclaimable",
+                        selectedIndex: $selectedSegmentIndex,
+                        onSelect: { index in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedSegmentIndex = index
                             }
                         }
+                    )
+                    .frame(maxWidth: 380, maxHeight: 380)
+                    
+                    // Legend
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("Breakdown")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding(.bottom, 8)
+                        
+                        SunburstLegendView(
+                            segments: sunburstSegments,
+                            totalSize: viewModel.totalSize,
+                            selectedIndex: $selectedSegmentIndex,
+                            onSelect: { index in
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    selectedSegmentIndex = index
+                                }
+                            }
+                        )
                     }
+                    .frame(maxWidth: 280, maxHeight: 380)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.horizontal, 20)
                 
-                if let cat = expandedCategory {
-                    CategoryDetailPanel(
-                        category: cat,
-                        files: viewModel.filesInCategory(cat)
+                // Selected segment detail
+                if let index = selectedSegmentIndex,
+                   index < sunburstSegments.count,
+                   !selectedSegmentFiles.isEmpty {
+                    SunburstDetailPanel(
+                        segment: sunburstSegments[index],
+                        files: selectedSegmentFiles
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .padding(.horizontal, 20)
                 }
                 
+                // Action buttons
                 HStack(spacing: 14) {
                     Button("Cancel") {
                         viewModel.reset()

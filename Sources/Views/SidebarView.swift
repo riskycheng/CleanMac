@@ -21,49 +21,63 @@ struct SidebarView: View {
     @State private var hoveredItem: SidebarItem? = nil
     
     var body: some View {
-        VStack(spacing: 4) {
-            // Logo icon
-            Image(systemName: "sparkles")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.green.opacity(0.8))
-                .frame(width: 44, height: 44)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
+        VStack(spacing: 0) {
+            // Logo area
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.green.opacity(0.8))
+                    .frame(width: 28, height: 28)
+                
+                Text("CleanMac")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 20)
+            .padding(.bottom, 16)
             
             Divider()
                 .background(Color.white.opacity(0.06))
                 .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.bottom, 12)
             
-            ForEach(SidebarItem.allCases) { item in
-                SidebarIconButton(
-                    item: item,
-                    isSelected: selection == item,
-                    isHovered: hoveredItem == item
-                ) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        selection = item
+            VStack(spacing: 4) {
+                ForEach(SidebarItem.allCases) { item in
+                    SidebarRow(
+                        item: item,
+                        isSelected: selection == item,
+                        isHovered: hoveredItem == item
+                    ) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            selection = item
+                        }
                     }
-                }
-                .onHover { isHover in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        hoveredItem = isHover ? item : nil
+                    .onHover { isHover in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            hoveredItem = isHover ? item : nil
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 10)
             
             Spacer()
             
-            // Status dot
-            HStack {
+            // Bottom status
+            HStack(spacing: 8) {
                 Circle()
                     .fill(Color.green.opacity(0.6))
                     .frame(width: 5, height: 5)
+                
+                Text("Ready")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.35))
             }
             .padding(.bottom, 16)
         }
-        .padding(.vertical, 8)
-        .frame(width: 60)
+        .frame(width: 200)
         .background(
             Color.black.opacity(0.3)
                 .overlay(
@@ -74,7 +88,7 @@ struct SidebarView: View {
     }
 }
 
-struct SidebarIconButton: View {
+struct SidebarRow: View {
     let item: SidebarItem
     let isSelected: Bool
     let isHovered: Bool
@@ -82,67 +96,33 @@ struct SidebarIconButton: View {
     
     var body: some View {
         Button(action: action) {
-            ZStack {
-                // Selection background
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? Color.green.opacity(0.3) : Color.clear, lineWidth: 1)
-                    )
-                
-                // Active indicator bar
-                HStack {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.green)
-                        .frame(width: 3, height: isSelected ? 20 : 0)
-                        .padding(.leading, -14)
-                    Spacer()
-                }
-                
+            HStack(spacing: 12) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 18, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.4))
+                    .font(.system(size: 16, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? .white : .white.opacity(0.45))
                     .frame(width: 22, height: 22)
+                
+                Text(item.rawValue)
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.5))
+                
+                Spacer()
             }
-            .frame(width: 40, height: 40)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isSelected
+                          ? Color.white.opacity(0.1)
+                          : (isHovered ? Color.white.opacity(0.04) : Color.clear))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(isSelected ? Color.green.opacity(0.25) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .overlay(
-            // Tooltip
-            Group {
-                if isHovered {
-                    HStack(spacing: 0) {
-                        Text(item.rawValue)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.black.opacity(0.85))
-                                    .shadow(color: .black.opacity(0.3), radius: 8)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-                            )
-                        
-                        // Arrow pointing left
-                        Path { path in
-                            path.move(to: CGPoint(x: 0, y: 5))
-                            path.addLine(to: CGPoint(x: 6, y: 0))
-                            path.addLine(to: CGPoint(x: 6, y: 10))
-                            path.closeSubpath()
-                        }
-                        .fill(Color.black.opacity(0.85))
-                        .frame(width: 6, height: 10)
-                    }
-                    .offset(x: 72)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                }
-            }
-        )
     }
 }
 
