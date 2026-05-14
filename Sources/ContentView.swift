@@ -6,7 +6,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             // Deep dark background
-            Color.black.ignoresSafeArea()
+            Color.black.opacity(0.92)
             
             // Subtle grid pattern
             GridPattern()
@@ -14,12 +14,19 @@ struct ContentView: View {
             
             // Matrix particles
             MatrixParticlesView()
-                .opacity(0.3)
+                .opacity(0.25)
             
             // Main content
             HStack(spacing: 0) {
                 SidebarView(selection: $selectedItem)
-                    .background(Color.black.opacity(0.2))
+                    .frame(width: 180)
+                    .background(
+                        Color.black.opacity(0.4)
+                            .overlay(
+                                VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
+                                    .opacity(0.4)
+                            )
+                    )
                 
                 Divider()
                     .background(Color.white.opacity(0.06))
@@ -35,10 +42,9 @@ struct ContentView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.black.opacity(0.1))
+                .background(Color.black.opacity(0.15))
             }
         }
-        .ignoresSafeArea()
     }
 }
 
