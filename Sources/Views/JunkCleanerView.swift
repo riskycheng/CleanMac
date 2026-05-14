@@ -2,6 +2,7 @@ import SwiftUI
 
 struct JunkCleanerView: View {
     @State private var viewModel = SystemJunkViewModel()
+    @State private var expandedCategory: JunkCategory? = nil
     
     var body: some View {
         ZStack {
@@ -21,7 +22,7 @@ struct JunkCleanerView: View {
                     logLines: viewModel.scanLog
                 )
             case .reviewing:
-                JunkReviewView(viewModel: viewModel)
+                JunkReviewView(viewModel: viewModel, expandedCategory: $expandedCategory)
             case .cleaning:
                 ModuleCleaningView(
                     progress: viewModel.cleanProgress,
@@ -42,6 +43,7 @@ struct JunkCleanerView: View {
 
 struct JunkReviewView: View {
     @Bindable var viewModel: SystemJunkViewModel
+    @Binding var expandedCategory: JunkCategory?
     
     var activeCategories: [JunkCategory] {
         JunkCategory.allCases.filter { viewModel.categorySize($0) > 0 }
@@ -50,25 +52,33 @@ struct JunkReviewView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Text("\(ByteFormatter.string(from: viewModel.totalSize)) reclaimable")
-                        .font(.system(size: 24, weight: .bold))
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundColor(.white)
                     Text("Found \(viewModel.junkFiles.count) junk files")
                         .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.45))
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
                 
-                let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(activeCategories, id: \.self) { category in
-                        CategoryCard(
+                let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(Array(activeCategories.enumerated()), id: \.element) { index, category in
+                        VisualCategoryCard(
                             category: category,
                             size: viewModel.categorySize(category),
                             count: viewModel.filesInCategory(category).count,
-                            isSelected: viewModel.filesInCategory(category).allSatisfy { $0.isSelected }
+                            isSelected: viewModel.filesInCategory(category).allSatisfy { $0.isSelected },
+                            isExpanded: expandedCategory == category,
+                            appearDelay: Double(index) * 0.08
                         ) {
+                            if expandedCategory == category {
+                                expandedCategory = nil
+                            } else {
+                                expandedCategory = category
+                            }
+                        } onToggle: {
                             let files = viewModel.filesInCategory(category)
                             let allSelected = files.allSatisfy { $0.isSelected }
                             for file in files {
@@ -76,6 +86,14 @@ struct JunkReviewView: View {
                             }
                         }
                     }
+                }
+                
+                if let cat = expandedCategory {
+                    CategoryDetailPanel(
+                        category: cat,
+                        files: viewModel.filesInCategory(cat)
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 
                 HStack(spacing: 14) {

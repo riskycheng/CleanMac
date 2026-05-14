@@ -5,10 +5,8 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // Soft dark background
             Color.black.opacity(0.92)
             
-            // Subtle ambient gradient
             RadialGradient(
                 colors: [
                     Color(hex: "1a2e1a").opacity(0.4),
@@ -20,17 +18,8 @@ struct ContentView: View {
                 endRadius: 800
             )
             
-            // Main content
             HStack(spacing: 0) {
                 SidebarView(selection: $selectedItem)
-                    .frame(width: 180)
-                    .background(
-                        Color.black.opacity(0.3)
-                            .overlay(
-                                VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
-                                    .opacity(0.3)
-                            )
-                    )
                 
                 Divider()
                     .background(Color.white.opacity(0.05))
