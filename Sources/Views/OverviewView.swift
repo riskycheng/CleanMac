@@ -36,7 +36,7 @@ struct OverviewView: View {
                         centerTitle: "\(Int(disk.usedPercentage * 100))%",
                         centerSubtitle: "USED"
                     )
-                    .frame(width: 380, height: 380)
+                    .frame(width: 360, height: 360)
                 }
                 
                 Spacer()
@@ -44,11 +44,11 @@ struct OverviewView: View {
                 // Storage breakdown - right side
                 storageBreakdown
                     .frame(width: 260)
+                
+                Spacer()
             }
             .padding(.horizontal, 24)
-            .padding(.top, 16)
-            
-            Spacer()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             
             // Bottom stats
             bottomStats
