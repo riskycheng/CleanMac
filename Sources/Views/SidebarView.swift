@@ -1,25 +1,31 @@
 import SwiftUI
 
 enum SidebarItem: String, CaseIterable, Identifiable {
-    case auto = "Auto"
-    case junkCleaner = "Junk"
-    case appUninstaller = "Apps"
+    case overview = "Overview"
+    case smartCare = "Smart Care"
+    case systemJunk = "System Junk"
+    case uninstaller = "Uninstaller"
+    case preferences = "Preferences"
     
     var id: String { rawValue }
     
     var icon: String {
         switch self {
-        case .auto: return "sparkles"
-        case .junkCleaner: return "trash"
-        case .appUninstaller: return "xmark.app"
+        case .overview: return "square.grid.2x2"
+        case .smartCare: return "sparkles"
+        case .systemJunk: return "trash"
+        case .uninstaller: return "app.badge.checkmark"
+        case .preferences: return "gearshape"
         }
     }
     
-    var fullTitle: String {
+    var accentColor: Color {
         switch self {
-        case .auto: return "Auto Clean"
-        case .junkCleaner: return "Junk Cleaner"
-        case .appUninstaller: return "Uninstaller"
+        case .overview: return Color(hex: "3B82F6")
+        case .smartCare: return Color(hex: "A855F7")
+        case .systemJunk: return Color(hex: "EF4444")
+        case .uninstaller: return Color(hex: "F97316")
+        case .preferences: return Color(hex: "6B7280")
         }
     }
 }
@@ -30,158 +36,113 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Logo
-            Image(systemName: "sparkles")
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [.green.opacity(0.9), .mint.opacity(0.7)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 44, height: 44)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color(hex: "3B82F6"))
+                        .frame(width: 34, height: 34)
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                
+                Text("PureClean")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(Color(hex: "111827"))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
             
-            Divider()
-                .background(Color.white.opacity(0.06))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-            
-            VStack(spacing: 8) {
-                ForEach(SidebarItem.allCases) { item in
-                    SidebarIconCell(
+            // Nav items
+            VStack(spacing: 4) {
+                ForEach(SidebarItem.allCases.prefix(4)) { item in
+                    SidebarRow(
                         item: item,
                         isSelected: selection == item
                     ) {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             selection = item
                         }
                     }
                 }
             }
+            .padding(.horizontal, 12)
             
             Spacer()
             
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.green.opacity(0.5))
-                    .frame(width: 5, height: 5)
-                Text("Ready")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.3))
+            Divider()
+                .background(Color.black.opacity(0.06))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            
+            SidebarRow(
+                item: .preferences,
+                isSelected: selection == .preferences
+            ) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    selection = .preferences
+                }
             }
+            .padding(.horizontal, 12)
             .padding(.bottom, 16)
         }
-        .frame(width: 90)
-        .background(
-            Color.black.opacity(0.25)
-                .overlay(
-                    VisualEffectBlur(material: .sidebar, blendingMode: .withinWindow)
-                        .opacity(0.3)
-                )
-        )
+        .frame(width: 210)
+        .background(Color(hex: "E8E8EA"))
     }
 }
 
-struct SidebarIconCell: View {
+struct SidebarRow: View {
     let item: SidebarItem
     let isSelected: Bool
     let action: () -> Void
-    
     @State private var isHovered = false
-    @State private var titleVisible = false
     
     var body: some View {
         Button(action: action) {
-            ZStack {
-                // Selection glow background
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(isSelected
-                          ? Color.green.opacity(0.08)
-                          : (isHovered ? Color.white.opacity(0.04) : Color.clear))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(isSelected ? Color.green.opacity(0.2) : Color.clear, lineWidth: 1)
-                    )
+            HStack(spacing: 12) {
+                // Accent bar
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(item.accentColor)
+                    .frame(width: 4, height: isSelected ? 24 : 0)
                 
-                VStack(spacing: 4) {
-                    // Icon
-                    ZStack {
-                        // Glow behind selected icon
-                        if isSelected {
-                            Circle()
-                                .fill(Color.green.opacity(0.15))
-                                .frame(width: 46, height: 46)
-                                .blur(radius: 8)
-                        }
-                        
-                        Image(systemName: item.icon)
-                            .font(.system(size: isSelected ? 26 : 24, weight: isSelected ? .semibold : .regular))
-                            .foregroundStyle(
-                                isSelected
-                                ? Color.white
-                                : Color.white.opacity(0.35)
-                            )
-                            .frame(width: 30, height: 30)
-                            .scaleEffect(isHovered && !isSelected ? 1.1 : 1.0)
-                    }
-                    .frame(height: 38)
+                // Icon background
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isSelected ? item.accentColor.opacity(0.12) : Color.clear)
+                        .frame(width: 34, height: 34)
                     
-                    // Title - appears on hover/selection
-                    Text(item.fullTitle)
-                        .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
-                        .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.5))
-                        .lineLimit(1)
-                        .opacity(titleVisible ? 1 : 0)
-                        .offset(y: titleVisible ? 0 : 4)
+                    Image(systemName: item.icon)
+                        .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
+                        .foregroundColor(isSelected ? item.accentColor : Color(hex: "9CA3AF"))
                 }
-                .padding(.vertical, 10)
+                .frame(width: 34, height: 34)
                 
-                // Active indicator - left bar
-                HStack {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.green)
-                        .frame(width: 3, height: isSelected ? 28 : 0)
-                        .padding(.leading, -32)
-                    Spacer()
-                }
+                Text(item.rawValue)
+                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? Color(hex: "111827") : Color(hex: "6B7280"))
+                
+                Spacer()
             }
-            .frame(width: 72)
+            .padding(.vertical, 6)
+            .padding(.leading, 6)
+            .padding(.trailing, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(isSelected ? Color.white : Color.clear)
+                    .shadow(color: isSelected ? Color.black.opacity(0.06) : .clear, radius: 8, x: 0, y: 2)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(isSelected ? Color.black.opacity(0.04) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hover in
-            isHovered = hover
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                titleVisible = hover || isSelected
-            }
-        }
-        .onAppear {
-            titleVisible = isSelected
-        }
-        .onChange(of: isSelected) { _, new in
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                titleVisible = new || isHovered
-            }
-        }
-    }
-}
-
-struct VisualEffectBlur: NSViewRepresentable {
-    var material: NSVisualEffectView.Material
-    var blendingMode: NSVisualEffectView.BlendingMode
-    
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        return view
-    }
-    
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
+        .scaleEffect(isHovered && !isSelected ? 1.01 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }
 

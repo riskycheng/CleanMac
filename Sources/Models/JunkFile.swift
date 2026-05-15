@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 enum JunkCategory: String, CaseIterable {
     case caches
@@ -45,6 +46,23 @@ enum JunkCategory: String, CaseIterable {
         case .developerCache: return "terminal"
         case .systemLogs: return "doc.text.fill"
         case .userLogs: return "doc.text"
+        }
+    }
+    
+    var chartColor: Color {
+        switch self {
+        case .caches: return Color(hex: "4ECDC4")
+        case .systemCaches: return Color(hex: "45B7D1")
+        case .logs: return Color(hex: "96CEB4")
+        case .tempFiles: return Color(hex: "FECA57")
+        case .brokenDownloads: return Color(hex: "FF6B6B")
+        case .trash: return Color(hex: "A29BFE")
+        case .orphanedSupport: return Color(hex: "FD79A8")
+        case .browserCache: return Color(hex: "FDCB6E")
+        case .xcodeJunk: return Color(hex: "00B894")
+        case .developerCache: return Color(hex: "6C5CE7")
+        case .systemLogs: return Color(hex: "74B9FF")
+        case .userLogs: return Color(hex: "55EFC4")
         }
     }
 }
