@@ -3,7 +3,7 @@ import SwiftUI
 enum SidebarItem: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case smartCare = "Smart Care"
-    case systemJunk = "System Junk"
+    case systemJunk = "Junks"
     case uninstaller = "Uninstaller"
     case preferences = "Preferences"
     
