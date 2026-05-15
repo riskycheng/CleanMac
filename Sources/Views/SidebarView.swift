@@ -47,7 +47,7 @@ struct SidebarView: View {
                 }
                 
                 Text("PureClean")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 18, weight: .black))
                     .foregroundColor(Color(hex: "111827"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,7 +56,7 @@ struct SidebarView: View {
             .padding(.bottom, 24)
             
             // Nav items
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 ForEach(SidebarItem.allCases.prefix(4)) { item in
                     SidebarRow(
                         item: item,
@@ -105,43 +105,53 @@ struct SidebarRow: View {
                 // Accent bar
                 RoundedRectangle(cornerRadius: 2)
                     .fill(item.accentColor)
-                    .frame(width: 4, height: isSelected ? 24 : 0)
+                    .frame(width: 4, height: isSelected ? 28 : 0)
+                    .opacity(isSelected ? 1 : 0)
                 
-                // Icon background
+                // Icon
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isSelected ? item.accentColor.opacity(0.12) : Color.clear)
-                        .frame(width: 34, height: 34)
-                    
-                    Image(systemName: item.icon)
-                        .font(.system(size: 17, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? item.accentColor : Color(hex: "9CA3AF"))
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(item.accentColor)
+                            .frame(width: 34, height: 34)
+                        Image(systemName: item.icon)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    } else {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(hex: "F3F4F6"))
+                            .frame(width: 34, height: 34)
+                        Image(systemName: item.icon)
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundColor(Color(hex: "9CA3AF"))
+                    }
                 }
                 .frame(width: 34, height: 34)
                 
                 Text(item.rawValue)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 14, weight: isSelected ? .bold : .semibold))
                     .foregroundColor(isSelected ? Color(hex: "111827") : Color(hex: "6B7280"))
                 
                 Spacer()
             }
-            .padding(.vertical, 6)
-            .padding(.leading, 6)
-            .padding(.trailing, 12)
+            .padding(.vertical, 8)
+            .padding(.leading, 8)
+            .padding(.trailing, 14)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(isSelected ? Color.white : Color.clear)
-                    .shadow(color: isSelected ? Color.black.opacity(0.06) : .clear, radius: 8, x: 0, y: 2)
+                    .fill(isSelected ? Color.white : (isHovered ? Color.white.opacity(0.6) : Color.white.opacity(0.3)))
+                    .shadow(color: isSelected ? Color.black.opacity(0.08) : (isHovered ? Color.black.opacity(0.04) : .clear), radius: isSelected ? 10 : 6, x: 0, y: isSelected ? 3 : 2)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(isSelected ? Color.black.opacity(0.04) : Color.clear, lineWidth: 1)
+                    .stroke(isSelected ? Color.black.opacity(0.06) : Color.black.opacity(0.02), lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .scaleEffect(isHovered && !isSelected ? 1.01 : 1.0)
         .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.easeInOut(duration: 0.2), value: isSelected)
         .onHover { isHovered = $0 }
     }
 }
