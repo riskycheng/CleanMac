@@ -96,7 +96,7 @@ struct UninstallerResultsView: View {
                             .foregroundColor(Color(hex: "F97316"))
                     }
                     Text("Uninstaller")
-                        .font(.system(size: 26, weight: .black))
+                        .font(.system(size: 28, weight: .black))
                         .foregroundColor(Color(hex: "111827"))
                     Text("Manage your workspace and reclaim storage space.")
                         .font(.system(size: 13, weight: .medium))
@@ -144,6 +144,9 @@ struct UninstallerResultsView: View {
             VStack(spacing: 0) {
                 // Table header
                 HStack(spacing: 0) {
+                    Text("")
+                        .frame(width: 48)
+                    
                     Text("APPLICATION INFO")
                         .font(.system(size: 9, weight: .bold))
                         .tracking(1.5)
@@ -222,7 +225,7 @@ struct AppTableRow: View {
             ))
             .toggleStyle(.checkbox)
             .controlSize(.small)
-            .frame(width: 36)
+            .frame(width: 48)
             
             HStack(spacing: 12) {
                 ZStack {

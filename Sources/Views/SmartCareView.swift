@@ -178,7 +178,7 @@ struct SmartCareReviewView: View {
     
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Header
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -192,7 +192,7 @@ struct SmartCareReviewView: View {
                                 .foregroundColor(Color(hex: "A855F7"))
                         }
                         Text("Optimization Overview")
-                            .font(.system(size: 26, weight: .black))
+                            .font(.system(size: 28, weight: .black))
                             .foregroundColor(Color(hex: "111827"))
                         Text("Your system is ready for a performance boost.")
                             .font(.system(size: 13, weight: .medium))
@@ -227,9 +227,10 @@ struct SmartCareReviewView: View {
                     StatCard(icon: "archivebox", iconColor: Color(hex: "F59E0B"), label: "Large Files", value: ByteFormatter.string(from: viewModel.totalAppSize), subValue: nil)
                 }
                 
-                // Main action card
-                HStack(spacing: 20) {
-                    VStack(alignment: .leading, spacing: 16) {
+                // Main action area
+                HStack(alignment: .top, spacing: 16) {
+                    // Left: Total savings
+                    VStack(alignment: .leading, spacing: 20) {
                         Text("TOTAL SAVINGS")
                             .font(.system(size: 10, weight: .bold))
                             .tracking(2)
@@ -237,17 +238,18 @@ struct SmartCareReviewView: View {
                         
                         HStack(alignment: .lastTextBaseline, spacing: 4) {
                             Text(String(format: "%.1f", Double(viewModel.totalSize) / 1_073_741_824.0))
-                                .font(.system(size: 56, weight: .black, design: .rounded))
+                                .font(.system(size: 64, weight: .black, design: .rounded))
                                 .foregroundColor(Color(hex: "111827"))
                             Text("GB")
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(Color(hex: "D1D5DB"))
+                                .padding(.bottom, 8)
                         }
                         
                         Text("Optimizing your system will significantly improve boot times and overall responsiveness.")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(Color(hex: "6B7280"))
-                            .frame(maxWidth: 280)
+                            .frame(maxWidth: 300)
                             .lineSpacing(3)
                         
                         Button(action: { viewModel.startCleanup() }) {
@@ -265,9 +267,10 @@ struct SmartCareReviewView: View {
                         .buttonStyle(.plain)
                         .padding(.top, 4)
                     }
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     
+                    // Right: Side cards
                     VStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("ESTIMATED SPEED BOOST")
@@ -275,15 +278,19 @@ struct SmartCareReviewView: View {
                                 .tracking(1.5)
                                 .foregroundColor(Color(hex: "9CA3AF"))
                             Text("+15%")
-                                .font(.system(size: 28, weight: .black, design: .rounded))
+                                .font(.system(size: 32, weight: .black, design: .rounded))
                                 .foregroundColor(Color(hex: "22C55E"))
                         }
-                        .padding(16)
+                        .padding(18)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(Color.white)
                                 .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.black.opacity(0.03), lineWidth: 1)
                         )
                         
                         VStack(alignment: .leading, spacing: 8) {
@@ -292,18 +299,22 @@ struct SmartCareReviewView: View {
                                 .tracking(1.5)
                                 .foregroundColor(Color(hex: "9CA3AF"))
                             Text("Optimal")
-                                .font(.system(size: 28, weight: .black, design: .rounded))
+                                .font(.system(size: 32, weight: .black, design: .rounded))
                                 .foregroundColor(Color(hex: "3B82F6"))
                         }
-                        .padding(16)
+                        .padding(18)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
                             RoundedRectangle(cornerRadius: 16)
                                 .fill(Color.white)
                                 .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
                         )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.black.opacity(0.03), lineWidth: 1)
+                        )
                     }
-                    .frame(width: 180)
+                    .frame(width: 200)
                 }
                 .padding(24)
                 .background(

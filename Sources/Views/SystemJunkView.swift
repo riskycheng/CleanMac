@@ -110,7 +110,7 @@ struct SystemJunkView: View {
                 ModernProgressView(
                     progress: viewModel.scanProgress,
                     stage: viewModel.scanStage,
-                    subStage: "Analyzing Storage Blocks...",
+                    subStage: "Identifying Corrupted Caches...",
                     accentColor: Color(hex: "EF4444")
                 )
             case .reviewing:
@@ -143,7 +143,7 @@ struct JunkReviewView: View {
     
     var body: some View {
         ScrollView(showsIndicators: false) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 // Header
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
@@ -157,7 +157,7 @@ struct JunkReviewView: View {
                                 .foregroundColor(Color(hex: "EF4444"))
                         }
                         Text("Scan Results")
-                            .font(.system(size: 26, weight: .black))
+                            .font(.system(size: 28, weight: .black))
                             .foregroundColor(Color(hex: "111827"))
                         Text("\(ByteFormatter.string(from: viewModel.totalSize)) found across your system components.")
                             .font(.system(size: 13, weight: .medium))
@@ -186,8 +186,8 @@ struct JunkReviewView: View {
                 }
                 
                 // Category cards
-                let topCategories = Array(activeCategories.prefix(4))
                 HStack(spacing: 12) {
+                    let topCategories = Array(activeCategories.prefix(4))
                     ForEach(Array(topCategories.enumerated()), id: \.offset) { _, category in
                         let size = viewModel.categorySize(category)
                         CategoryResultCard(
@@ -209,7 +209,7 @@ struct JunkReviewView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text(cat.displayName)
-                                .font(.system(size: 16, weight: .black))
+                                .font(.system(size: 18, weight: .black))
                                 .foregroundColor(Color(hex: "111827"))
                             Spacer()
                             Text("\(viewModel.filesInCategory(cat).count) items")
@@ -248,6 +248,10 @@ struct JunkReviewView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color.white)
                             .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.black.opacity(0.03), lineWidth: 1)
                     )
                 } else {
                     ActionCard(
