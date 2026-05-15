@@ -27,14 +27,16 @@ struct OverviewView: View {
             
             // Main content: chart + storage breakdown
             HStack(spacing: 0) {
-                // Donut chart - left side
+                Spacer()
+                
+                // Donut chart - centered
                 if let disk = viewModel.diskInfo {
                     DonutChartView(
                         segments: donutSegments(disk: disk),
                         centerTitle: "\(Int(disk.usedPercentage * 100))%",
                         centerSubtitle: "USED"
                     )
-                    .frame(width: 400, height: 400)
+                    .frame(width: 380, height: 380)
                 }
                 
                 Spacer()
@@ -42,10 +44,9 @@ struct OverviewView: View {
                 // Storage breakdown - right side
                 storageBreakdown
                     .frame(width: 260)
-                    .padding(.trailing, 16)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.horizontal, 24)
+            .padding(.top, 16)
             
             Spacer()
             
@@ -83,29 +84,14 @@ struct OverviewView: View {
             
             Spacer()
             
-            // Right button
-            Button(action: onLaunchSmartCare) {
-                HStack(spacing: 8) {
-                    Text("LAUNCH SMART CARE")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.5)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 11, weight: .bold))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(hex: "1C1C1E"))
-                )
-            }
-            .buttonStyle(.plain)
+            // Empty right side to balance
+            Color.clear
+                .frame(width: 140, height: 1)
         }
     }
     
     private var storageBreakdown: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("STORAGE BREAKDOWN")
                 .font(.system(size: 10, weight: .bold))
                 .tracking(1.5)
@@ -137,7 +123,7 @@ struct OverviewView: View {
             }
             
             // Category list
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 StorageRow(icon: "doc", iconBg: Color(hex: "EFF6FF"), iconColor: Color(hex: "3B82F6"), label: "Media & Files", value: "342 GB")
                 StorageRow(icon: "app", iconBg: Color(hex: "FDF2F8"), iconColor: Color(hex: "F472B6"), label: "Applications", value: "85 GB")
                 StorageRow(icon: "trash", iconBg: Color(hex: "F5F3FF"), iconColor: Color(hex: "A78BFA"), label: "System Junk", value: "12.4 GB")
