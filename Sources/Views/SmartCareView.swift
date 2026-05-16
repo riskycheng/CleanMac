@@ -95,25 +95,62 @@ final class SmartCareViewModel {
     }
     
     private func runCleanup() async {
+        let selectedJunk = junkFiles.filter { $0.isSelected }
+        let selectedApps = apps.filter { $0.isSelected }
+        let totalToClean = selectedJunk.count + selectedApps.count
         var processed = 0
         
-        for file in junkFiles.filter({ $0.isSelected }) {
-            if shouldStop { break }
-            await updateClean(stage: "Removing \(file.name)...", progress: Double(processed) / Double(max(junkFiles.count, 1)))
-            do { try FileManager.default.trashItem(at: file.url, resultingItemURL: nil); spaceReclaimed += file.size; itemsCleaned += 1 } catch { }
-            processed += 1
-            try? await Task.sleep(for: .milliseconds(60))
+        // Clean junk files
+        var remainingJunk: [JunkFile] = []
+        for file in junkFiles {
+            if file.isSelected {
+                if shouldStop { break }
+                await updateClean(stage: "Removing \(file.name)...", progress: Double(processed) / Double(max(totalToClean, 1)))
+                do {
+                    try FileManager.default.trashItem(at: file.url, resultingItemURL: nil)
+                    spaceReclaimed += file.size
+                    itemsCleaned += 1
+                } catch {
+                    print("[CleanMac] Failed to trash junk \(file.path): \(error)")
+                    remainingJunk.append(file)
+                }
+                processed += 1
+                try? await Task.sleep(for: .milliseconds(60))
+            } else {
+                remainingJunk.append(file)
+            }
         }
+        await MainActor.run { junkFiles = remainingJunk }
+        totalJunkSize = junkFiles.reduce(0) { $0 + $1.size }
         
-        for app in apps.filter({ $0.isSelected }) {
-            if shouldStop { break }
-            await updateClean(stage: "Uninstalling \(app.name)...", progress: Double(processed) / Double(max(apps.count, 1)))
-            do { try FileManager.default.trashItem(at: app.url, resultingItemURL: nil); spaceReclaimed += app.size; itemsCleaned += 1 } catch { }
-            processed += 1
-            try? await Task.sleep(for: .milliseconds(80))
+        // Clean apps (bundle + all leftovers)
+        var remainingApps: [AppBundle] = []
+        for app in apps {
+            if app.isSelected {
+                if shouldStop { break }
+                await updateClean(stage: "Uninstalling \(app.name)...", progress: Double(processed) / Double(max(totalToClean, 1)))
+                do {
+                    try FileManager.default.trashItem(at: app.url, resultingItemURL: nil)
+                    for leftover in app.leftoverFiles {
+                        do { try FileManager.default.trashItem(at: leftover, resultingItemURL: nil) }
+                        catch { print("[CleanMac] Failed to trash leftover \(leftover.path): \(error)") }
+                    }
+                    spaceReclaimed += app.totalSize
+                    itemsCleaned += 1
+                } catch {
+                    print("[CleanMac] Failed to trash app \(app.url.path): \(error)")
+                    remainingApps.append(app)
+                }
+                processed += 1
+                try? await Task.sleep(for: .milliseconds(80))
+            } else {
+                remainingApps.append(app)
+            }
         }
+        await MainActor.run { apps = remainingApps }
+        totalAppSize = apps.reduce(0) { $0 + $1.totalSize }
         
-        await updateClean(stage: "Cleanup complete", progress: 1.0)
+        await updateClean(stage: "Cleanup complete — \(itemsCleaned) items removed", progress: 1.0)
         try? await Task.sleep(for: .milliseconds(800))
         if !shouldStop { state = .complete }
     }
@@ -612,38 +649,52 @@ struct JunkDetailList: View {
     let files: [JunkFile]
     
     var body: some View {
-        ScrollView(showsIndicators: true) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
-                    @Bindable var bf = file
-                    HStack(spacing: 12) {
-                        Toggle("", isOn: $bf.isSelected)
-                            .toggleStyle(.checkbox)
-                            .controlSize(.small)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(file.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "374151"))
-                            Text(file.path)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(Color(hex: "9CA3AF"))
-                                .lineLimit(1)
-                        }
-                        
-                        Spacer()
-                        
-                        Text(ByteFormatter.string(from: file.size))
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                            .foregroundColor(Color(hex: "9CA3AF"))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(index % 2 == 0 ? Color(hex: "F9FAFB") : Color.clear)
-                }
-            }
+        List(files) { file in
+            JunkFileRow(file: file)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
         }
-        .padding(.horizontal, 28)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+struct JunkFileRow: View {
+    let file: JunkFile
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: file.isSelected ? "checkmark.square.fill" : "square")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(file.isSelected ? Color(hex: "3B82F6") : Color(hex: "D1D5DB"))
+                .contentTransition(.symbolEffect(.replace))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(hex: "374151"))
+                Text(file.path)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            Text(ByteFormatter.string(from: file.size))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundColor(Color(hex: "9CA3AF"))
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .background(isHovered ? Color(hex: "F3F4F6") : Color.clear)
+        .cornerRadius(6)
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            file.isSelected.toggle()
+        }
     }
 }
 
@@ -651,46 +702,58 @@ struct AppDetailList: View {
     let apps: [AppBundle]
     
     var body: some View {
-        ScrollView(showsIndicators: true) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
-                    HStack(spacing: 12) {
-                        Toggle("", isOn: Binding(
-                            get: { app.isSelected },
-                            set: { app.isSelected = $0 }
-                        ))
-                        .toggleStyle(.checkbox)
-                        .controlSize(.small)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(app.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "374151"))
-                            Text(app.bundleID)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(Color(hex: "9CA3AF"))
-                                .lineLimit(1)
-                        }
-                        
-                        Spacer()
-                        
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(ByteFormatter.string(from: app.totalSize))
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                .foregroundColor(Color(hex: "9CA3AF"))
-                            if let days = app.daysSinceUsed {
-                                Text("\(Int(days))d unused")
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundColor(Color(hex: "D1D5DB"))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(index % 2 == 0 ? Color(hex: "F9FAFB") : Color.clear)
+        List(apps) { app in
+            AppBundleRow(app: app)
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+struct AppBundleRow: View {
+    let app: AppBundle
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: app.isSelected ? "checkmark.square.fill" : "square")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(app.isSelected ? Color(hex: "3B82F6") : Color(hex: "D1D5DB"))
+                .contentTransition(.symbolEffect(.replace))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(app.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(hex: "374151"))
+                Text(app.bundleID)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(ByteFormatter.string(from: app.totalSize))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+                if let days = app.daysSinceUsed {
+                    Text("\(Int(days))d unused")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(Color(hex: "D1D5DB"))
                 }
             }
         }
-        .padding(.horizontal, 28)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .background(isHovered ? Color(hex: "F3F4F6") : Color.clear)
+        .cornerRadius(6)
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            app.isSelected.toggle()
+        }
     }
 }

@@ -58,16 +58,26 @@ final class SystemJunkViewModel {
     }
     
     private func runClean(selected: [JunkFile]) async {
+        var remaining = junkFiles
         for (index, file) in selected.enumerated() {
             await MainActor.run {
                 cleanStage = "Removing \(file.name)..."
                 cleanProgress = Double(index) / Double(selected.count)
             }
-            do { try FileManager.default.trashItem(at: file.url, resultingItemURL: nil); spaceReclaimed += file.size; itemsCleaned += 1 } catch { }
+            do {
+                try FileManager.default.trashItem(at: file.url, resultingItemURL: nil)
+                spaceReclaimed += file.size
+                itemsCleaned += 1
+                remaining.removeAll { $0.id == file.id }
+            } catch {
+                print("[CleanMac] Failed to trash \(file.path): \(error)")
+            }
             try? await Task.sleep(for: .milliseconds(60))
         }
         await MainActor.run {
-            cleanStage = "Cleanup complete"
+            junkFiles = remaining
+            totalSize = junkFiles.reduce(0) { $0 + $1.size }
+            cleanStage = "Cleanup complete — \(itemsCleaned) items removed"
             cleanProgress = 1.0
             state = .complete
         }
