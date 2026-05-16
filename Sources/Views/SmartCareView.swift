@@ -8,6 +8,12 @@ enum SmartCareState {
     case complete
 }
 
+enum SmartCareDetail: Hashable {
+    case junk
+    case unusedApps
+    case largeFiles
+}
+
 @MainActor
 @Observable
 final class SmartCareViewModel {
@@ -28,6 +34,8 @@ final class SmartCareViewModel {
     
     var totalSize: Int64 { totalJunkSize + totalAppSize }
     var totalItems: Int { junkFiles.count + apps.count }
+    
+    var detailMode: SmartCareDetail? = nil
     
     private var shouldStop = false
     
@@ -73,7 +81,7 @@ final class SmartCareViewModel {
         await MainActor.run {
             scanStage = stage
             scanProgress = progress
-            scanLogs.append("[77%] \(stage)")
+            scanLogs.append("[\(Int(progress * 100))%] \(stage)")
             if scanLogs.count > 12 { scanLogs.removeFirst() }
         }
     }
@@ -114,9 +122,18 @@ final class SmartCareViewModel {
         await MainActor.run { cleanStage = stage; cleanProgress = progress }
     }
     
+    func showDetail(_ detail: SmartCareDetail) {
+        detailMode = detail
+    }
+    
+    func closeDetail() {
+        detailMode = nil
+    }
+    
     func reset() {
         shouldStop = true
         state = .idle
+        detailMode = nil
         junkFiles.removeAll(); apps.removeAll()
         totalJunkSize = 0; totalAppSize = 0
         itemsCleaned = 0; spaceReclaimed = 0
@@ -239,7 +256,11 @@ struct SmartCareView: View {
                     accentColor: Color(hex: "A855F7")
                 )
             case .reviewing:
-                SmartCareReviewView(viewModel: viewModel)
+                if let detail = viewModel.detailMode {
+                    SmartCareDetailView(viewModel: viewModel, detail: detail)
+                } else {
+                    SmartCareReviewView(viewModel: viewModel)
+                }
             case .cleaning:
                 CleaningView(
                     progress: viewModel.cleanProgress,
@@ -305,12 +326,36 @@ struct SmartCareReviewView: View {
                     .buttonStyle(.plain)
                 }
                 
-                // Top stat cards
+                // Top stat cards — clickable
                 HStack(spacing: 12) {
-                    StatCard(icon: "trash", iconColor: Color(hex: "3B82F6"), label: "System Junk", value: ByteFormatter.string(from: viewModel.totalJunkSize), subValue: nil)
+                    ClickableStatCard(
+                        icon: "trash",
+                        iconColor: Color(hex: "3B82F6"),
+                        label: "System Junk",
+                        value: ByteFormatter.string(from: viewModel.totalJunkSize)
+                    ) {
+                        viewModel.showDetail(.junk)
+                    }
+                    
                     let unusedCount = viewModel.apps.filter { $0.isUnused }.count
-                    StatCard(icon: "app", iconColor: Color(hex: "F472B6"), label: "Unused Apps", value: "\(unusedCount) Apps", subValue: nil)
-                    StatCard(icon: "archivebox", iconColor: Color(hex: "F59E0B"), label: "Large Files", value: ByteFormatter.string(from: viewModel.totalAppSize), subValue: nil)
+                    ClickableStatCard(
+                        icon: "app",
+                        iconColor: Color(hex: "F472B6"),
+                        label: "Unused Apps",
+                        value: "\(unusedCount) Apps"
+                    ) {
+                        viewModel.showDetail(.unusedApps)
+                    }
+                    
+                    let largeSize = viewModel.apps.filter { Double($0.totalSize) / 1_048_576 > 500 }.reduce(0) { $0 + $1.totalSize }
+                    ClickableStatCard(
+                        icon: "archivebox",
+                        iconColor: Color(hex: "F59E0B"),
+                        label: "Large Files",
+                        value: ByteFormatter.string(from: largeSize)
+                    ) {
+                        viewModel.showDetail(.largeFiles)
+                    }
                 }
                 
                 // Main action area
@@ -415,5 +460,237 @@ struct SmartCareReviewView: View {
             }
             .padding(28)
         }
+    }
+}
+
+// MARK: - Clickable Stat Card
+
+struct ClickableStatCard: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    let value: String
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(iconColor)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(Color(hex: "D1D5DB"))
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label.uppercased())
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.5)
+                        .foregroundColor(Color(hex: "9CA3AF"))
+                    
+                    Text(value)
+                        .font(.system(size: 20, weight: .black))
+                        .foregroundColor(Color(hex: "111827"))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isHovered ? iconColor.opacity(0.4) : Color.black.opacity(0.03), lineWidth: isHovered ? 2 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Detail Views
+
+struct SmartCareDetailView: View {
+    @Bindable var viewModel: SmartCareViewModel
+    let detail: SmartCareDetail
+    
+    var title: String {
+        switch detail {
+        case .junk: return "System Junk"
+        case .unusedApps: return "Unused Apps"
+        case .largeFiles: return "Large Files"
+        }
+    }
+    
+    var icon: String {
+        switch detail {
+        case .junk: return "trash"
+        case .unusedApps: return "app"
+        case .largeFiles: return "archivebox"
+        }
+    }
+    
+    var accentColor: Color {
+        switch detail {
+        case .junk: return Color(hex: "3B82F6")
+        case .unusedApps: return Color(hex: "F472B6")
+        case .largeFiles: return Color(hex: "F59E0B")
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Button(action: { viewModel.closeDetail() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Back")
+                            .font(.system(size: 13, weight: .bold))
+                    }
+                    .foregroundColor(Color(hex: "6B7280"))
+                }
+                .buttonStyle(.plain)
+                
+                Spacer()
+                
+                HStack(spacing: 6) {
+                    Image(systemName: icon)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(accentColor)
+                    Text(title.uppercased())
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.5)
+                        .foregroundColor(accentColor)
+                }
+                
+                Spacer()
+                
+                Button(action: { viewModel.startCleanup() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("CLEAN")
+                            .font(.system(size: 11, weight: .bold))
+                            .tracking(0.5)
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(accentColor)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+            
+            // Content
+            switch detail {
+            case .junk:
+                JunkDetailList(files: viewModel.junkFiles)
+            case .unusedApps:
+                AppDetailList(apps: viewModel.apps.filter { $0.isUnused })
+            case .largeFiles:
+                AppDetailList(apps: viewModel.apps.filter { Double($0.totalSize) / 1_048_576 > 500 }.sorted { $0.totalSize > $1.totalSize })
+            }
+        }
+    }
+}
+
+struct JunkDetailList: View {
+    let files: [JunkFile]
+    
+    var body: some View {
+        ScrollView(showsIndicators: true) {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(files.enumerated()), id: \.element.id) { index, file in
+                    @Bindable var bf = file
+                    HStack(spacing: 12) {
+                        Toggle("", isOn: $bf.isSelected)
+                            .toggleStyle(.checkbox)
+                            .controlSize(.small)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "374151"))
+                            Text(file.path)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(Color(hex: "9CA3AF"))
+                                .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                        
+                        Text(ByteFormatter.string(from: file.size))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundColor(Color(hex: "9CA3AF"))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(index % 2 == 0 ? Color(hex: "F9FAFB") : Color.clear)
+                }
+            }
+        }
+        .padding(.horizontal, 28)
+    }
+}
+
+struct AppDetailList: View {
+    let apps: [AppBundle]
+    
+    var body: some View {
+        ScrollView(showsIndicators: true) {
+            LazyVStack(spacing: 0) {
+                ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
+                    HStack(spacing: 12) {
+                        Toggle("", isOn: Binding(
+                            get: { app.isSelected },
+                            set: { app.isSelected = $0 }
+                        ))
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(app.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "374151"))
+                            Text(app.bundleID)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(Color(hex: "9CA3AF"))
+                                .lineLimit(1)
+                        }
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(ByteFormatter.string(from: app.totalSize))
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundColor(Color(hex: "9CA3AF"))
+                            if let days = app.daysSinceUsed {
+                                Text("\(Int(days))d unused")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(Color(hex: "D1D5DB"))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(index % 2 == 0 ? Color(hex: "F9FAFB") : Color.clear)
+                }
+            }
+        }
+        .padding(.horizontal, 28)
     }
 }

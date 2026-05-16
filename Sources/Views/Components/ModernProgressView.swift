@@ -78,13 +78,13 @@ struct TerminalScanView: View {
                     }
                     .padding(16)
                 }
-                .frame(height: 140)
+                .frame(height: 220)
                 .background(Color(hex: "111111"))
             }
             .background(Color(hex: "111111"))
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.15), radius: 24, x: 0, y: 12)
-            .frame(width: 420)
+            .frame(width: 640)
             
             // Progress
             VStack(spacing: 10) {
@@ -99,7 +99,7 @@ struct TerminalScanView: View {
                             .frame(width: max(0, geo.size.width * CGFloat(progress)), height: 6)
                     }
                 }
-                .frame(width: 280, height: 6)
+                .frame(width: 400, height: 6)
                 
                 Text("DEEP SCANNING SYSTEM...")
                     .font(.system(size: 10, weight: .bold))
