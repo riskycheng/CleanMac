@@ -12,6 +12,7 @@ enum SmartCareDetail: Hashable {
     case junk
     case unusedApps
     case largeFiles
+    case duplicates
 }
 
 @MainActor
@@ -32,8 +33,14 @@ final class SmartCareViewModel {
     var itemsCleaned: Int = 0
     var spaceReclaimed: Int64 = 0
     
-    var totalSize: Int64 { totalJunkSize + totalAppSize }
-    var totalItems: Int { junkFiles.count + apps.count }
+    var largeFiles: [LargeFile] = []
+    var duplicateGroups: [DuplicateGroup] = []
+    
+    var totalSize: Int64 { totalJunkSize + totalAppSize + largeFileSize + duplicateWaste }
+    var totalItems: Int { junkFiles.count + apps.count + largeFiles.count }
+    
+    var largeFileSize: Int64 { largeFiles.filter { $0.isSelected }.reduce(0) { $0 + $1.allocatedSize } }
+    var duplicateWaste: Int64 { duplicateGroups.filter { $0.isSelected }.reduce(0) { $0 + $1.totalWastedSpace } }
     
     var detailMode: SmartCareDetail? = nil
     
@@ -75,6 +82,9 @@ final class SmartCareViewModel {
         try? await Task.sleep(for: .milliseconds(600))
         
         if !shouldStop { state = .reviewing }
+        
+        // Background scan for large files and duplicates
+        Task { await runBackgroundScans() }
     }
     
     private func updateScan(stage: String, progress: Double) async {
@@ -167,11 +177,22 @@ final class SmartCareViewModel {
         detailMode = nil
     }
     
+    private func runBackgroundScans() async {
+        // Large files
+        let scannedLarge = await LargeFileScanner.scan()
+        await MainActor.run { largeFiles = scannedLarge }
+        
+        // Duplicates (can be slow, so run after large files)
+        let scannedDups = await DuplicateScanner.scan()
+        await MainActor.run { duplicateGroups = scannedDups }
+    }
+    
     func reset() {
         shouldStop = true
         state = .idle
         detailMode = nil
         junkFiles.removeAll(); apps.removeAll()
+        largeFiles.removeAll(); duplicateGroups.removeAll()
         totalJunkSize = 0; totalAppSize = 0
         itemsCleaned = 0; spaceReclaimed = 0
     }
@@ -364,6 +385,7 @@ struct SmartCareReviewView: View {
                 }
                 
                 // Top stat cards — clickable
+                // Top stat cards — 4 columns
                 HStack(spacing: 12) {
                     ClickableStatCard(
                         icon: "trash",
@@ -384,7 +406,7 @@ struct SmartCareReviewView: View {
                         viewModel.showDetail(.unusedApps)
                     }
                     
-                    let largeSize = viewModel.apps.filter { Double($0.totalSize) / 1_048_576 > 500 }.reduce(0) { $0 + $1.totalSize }
+                    let largeSize = viewModel.largeFiles.filter { $0.isSelected }.reduce(0) { $0 + $1.allocatedSize }
                     ClickableStatCard(
                         icon: "archivebox",
                         iconColor: Color(hex: "F59E0B"),
@@ -392,6 +414,16 @@ struct SmartCareReviewView: View {
                         value: ByteFormatter.string(from: largeSize)
                     ) {
                         viewModel.showDetail(.largeFiles)
+                    }
+                    
+                    let dupWaste = viewModel.duplicateGroups.filter { $0.isSelected }.reduce(0) { $0 + $1.totalWastedSpace }
+                    ClickableStatCard(
+                        icon: "doc.on.doc",
+                        iconColor: Color(hex: "22C55E"),
+                        label: "Duplicates",
+                        value: ByteFormatter.string(from: dupWaste)
+                    ) {
+                        viewModel.showDetail(.duplicates)
                     }
                 }
                 
@@ -562,6 +594,7 @@ struct SmartCareDetailView: View {
         case .junk: return "System Junk"
         case .unusedApps: return "Unused Apps"
         case .largeFiles: return "Large Files"
+        case .duplicates: return "Duplicates"
         }
     }
     
@@ -570,6 +603,7 @@ struct SmartCareDetailView: View {
         case .junk: return "trash"
         case .unusedApps: return "app"
         case .largeFiles: return "archivebox"
+        case .duplicates: return "doc.on.doc"
         }
     }
     
@@ -578,6 +612,7 @@ struct SmartCareDetailView: View {
         case .junk: return Color(hex: "3B82F6")
         case .unusedApps: return Color(hex: "F472B6")
         case .largeFiles: return Color(hex: "F59E0B")
+        case .duplicates: return Color(hex: "22C55E")
         }
     }
     
@@ -639,7 +674,9 @@ struct SmartCareDetailView: View {
             case .unusedApps:
                 AppDetailList(apps: viewModel.apps.filter { $0.isUnused })
             case .largeFiles:
-                AppDetailList(apps: viewModel.apps.filter { Double($0.totalSize) / 1_048_576 > 500 }.sorted { $0.totalSize > $1.totalSize })
+                LargeFileDetailView(files: viewModel.largeFiles)
+            case .duplicates:
+                DuplicateDetailView(groups: viewModel.duplicateGroups)
             }
         }
     }
@@ -755,5 +792,168 @@ struct AppBundleRow: View {
         .onTapGesture {
             app.isSelected.toggle()
         }
+    }
+}
+
+
+// MARK: - Large File Detail View
+
+struct LargeFileDetailView: View {
+    let files: [LargeFile]
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            if !files.isEmpty {
+                AccessTimeHeatmapView(buckets: LargeFileScanner.accessTimeBuckets(files))
+                    .padding(.horizontal, 28)
+            }
+            
+            List(files) { file in
+                LargeFileRow(file: file)
+                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
+}
+
+struct LargeFileRow: View {
+    let file: LargeFile
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: file.isSelected ? "checkmark.square.fill" : "square")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(file.isSelected ? Color(hex: "3B82F6") : Color(hex: "D1D5DB"))
+                .contentTransition(.symbolEffect(.replace))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(file.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Color(hex: "374151"))
+                Text(file.path)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(ByteFormatter.string(from: file.allocatedSize))
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Color(hex: "9CA3AF"))
+                Text(file.accessBucket)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(Color(hex: file.accessBucketColor))
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .background(isHovered ? Color(hex: "F3F4F6") : Color.clear)
+        .cornerRadius(6)
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            file.isSelected.toggle()
+        }
+    }
+}
+
+// MARK: - Duplicate Detail View
+
+struct DuplicateDetailView: View {
+    let groups: [DuplicateGroup]
+    
+    var body: some View {
+        ScrollView(showsIndicators: true) {
+            VStack(spacing: 12) {
+                ForEach(groups) { group in
+                    DuplicateGroupCard(group: group)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+struct DuplicateGroupCard: View {
+    let group: DuplicateGroup
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: group.isSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(group.isSelected ? Color(hex: "22C55E") : Color(hex: "D1D5DB"))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(group.files.count) copies · \(ByteFormatter.string(from: group.size)) each")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(hex: "374151"))
+                    Text("Wasted: \(ByteFormatter.string(from: group.totalWastedSpace))")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color(hex: "22C55E"))
+                }
+                
+                Spacer()
+                
+                Button(action: { isExpanded.toggle() }) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(Color(hex: "9CA3AF"))
+                }
+                .buttonStyle(.plain)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                group.isSelected.toggle()
+            }
+            
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(group.files) { file in
+                        HStack(spacing: 8) {
+                            Image(systemName: file.isSelected ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 10))
+                                .foregroundColor(file.isSelected ? Color(hex: "22C55E") : Color(hex: "D1D5DB"))
+                            
+                            Text(file.name)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color(hex: "6B7280"))
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            Text(file.path)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(Color(hex: "9CA3AF"))
+                                .lineLimit(1)
+                                .frame(maxWidth: 200, alignment: .trailing)
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            file.isSelected.toggle()
+                        }
+                    }
+                }
+                .padding(.leading, 26)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.04), radius: 10, x: 0, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.black.opacity(0.03), lineWidth: 1)
+        )
     }
 }

@@ -101,8 +101,11 @@ enum AppIntelligenceEngine {
         let fm = FileManager.default
         
         if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
-            let allURLs = enumerator.allObjects as! [URL]
-            for fileURL in allURLs {
+            var checkCount = 0
+            while let next = enumerator.nextObject() {
+                checkCount += 1
+                if checkCount % 200 == 0 && Task.isCancelled { break }
+                guard let fileURL = next as? URL else { continue }
                 total += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
             }
         }

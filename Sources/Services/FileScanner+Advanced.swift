@@ -175,9 +175,11 @@ extension FileScanner {
             options: [.skipsHiddenFiles]
         ) else { return [] }
         
-        let allURLs = enumerator.allObjects as! [URL]
-        
-        for fileURL in allURLs {
+        var checkCount = 0
+        while let next = enumerator.nextObject() {
+            checkCount += 1
+            if checkCount % 200 == 0 && Task.isCancelled { break }
+            guard let fileURL = next as? URL else { continue }
             let depth = fileURL.pathComponents.count - url.pathComponents.count
             guard depth <= maxDepth else { continue }
             
@@ -272,8 +274,11 @@ extension FileScanner {
                 // Calculate recursive size
                 var size: Int64 = 0
                 if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) {
-                    let allURLs = enumerator.allObjects as! [URL]
-                    for fileURL in allURLs {
+                    var checkCount = 0
+                    while let next = enumerator.nextObject() {
+                        checkCount += 1
+                        if checkCount % 200 == 0 && Task.isCancelled { break }
+                        guard let fileURL = next as? URL else { continue }
                         size += (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
                     }
                 }
