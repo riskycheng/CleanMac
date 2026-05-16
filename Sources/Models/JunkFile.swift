@@ -68,7 +68,7 @@ enum JunkCategory: String, CaseIterable {
 }
 
 @Observable
-class JunkFile: Identifiable {
+class JunkFile: Identifiable, @unchecked Sendable {
     let id = UUID()
     let name: String
     let path: String

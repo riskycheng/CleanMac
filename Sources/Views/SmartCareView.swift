@@ -55,8 +55,8 @@ final class SmartCareViewModel {
             try? await Task.sleep(for: .milliseconds(400))
         }
         
-        let scannedJunk = await FileScanner.scanSystemJunk()
-        let scannedApps = await FileScanner.scanApplications()
+        let scannedJunk = await FileScanner.smartScanJunk()
+        let scannedApps = await AppIntelligenceEngine.scanAll()
         
         junkFiles = scannedJunk
         apps = scannedApps
@@ -308,7 +308,8 @@ struct SmartCareReviewView: View {
                 // Top stat cards
                 HStack(spacing: 12) {
                     StatCard(icon: "trash", iconColor: Color(hex: "3B82F6"), label: "System Junk", value: ByteFormatter.string(from: viewModel.totalJunkSize), subValue: nil)
-                    StatCard(icon: "app", iconColor: Color(hex: "F472B6"), label: "Unused Apps", value: "\(viewModel.apps.count) Apps", subValue: nil)
+                    let unusedCount = viewModel.apps.filter { $0.isUnused }.count
+                    StatCard(icon: "app", iconColor: Color(hex: "F472B6"), label: "Unused Apps", value: "\(unusedCount) Apps", subValue: nil)
                     StatCard(icon: "archivebox", iconColor: Color(hex: "F59E0B"), label: "Large Files", value: ByteFormatter.string(from: viewModel.totalAppSize), subValue: nil)
                 }
                 

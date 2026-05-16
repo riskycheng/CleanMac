@@ -39,7 +39,7 @@ final class SystemJunkViewModel {
             await MainActor.run { scanStage = stage; scanProgress = progress }
             try? await Task.sleep(for: .milliseconds(400))
         }
-        let files = await FileScanner.scanSystemJunk()
+        let files = await FileScanner.smartScanJunk()
         await MainActor.run {
             junkFiles = files
             totalSize = files.reduce(0) { $0 + $1.size }

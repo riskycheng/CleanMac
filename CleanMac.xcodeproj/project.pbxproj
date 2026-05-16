@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1B93A3F376E36A4B08951177 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 821738A72D24C51E8F61AE08 /* OverviewView.swift */; };
 		1F2385BA25106F4B6D9FBF25 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B316A498C1D10AF994049D0E /* SidebarView.swift */; };
+		2B1E1B35333C5AA7F2F6670A /* AppIntelligenceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1210584709BBE4340FE5D8 /* AppIntelligenceEngine.swift */; };
 		2C74457E2A6B6408D2F9A98D /* UninstallerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F70276A383C47F7B258BEB6 /* UninstallerView.swift */; };
 		2F40E2861F2268C93E72159E /* AppBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F51D767DE41162EAF47BEA5 /* AppBundle.swift */; };
 		32A40DB724B9EB97687A07DA /* CleanMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9C1E410E0BB4ECEDAD2CA6 /* CleanMacApp.swift */; };
@@ -18,12 +19,14 @@
 		7246BADA4BB352E4A3189AFB /* SystemJunkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC602E6390EB37C4F9F84322 /* SystemJunkView.swift */; };
 		78830EA5B565E6BAC7DF6522 /* ByteFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFD1CA835B4F1780AFE37B2 /* ByteFormatter.swift */; };
 		7CE310111B3AFAE786F10C8E /* PathConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D5429E045B95040BB7FE11 /* PathConstants.swift */; };
+		8E1474F07CF9503BAB11698F /* LaunchServicesHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703FFFB600E62C5920D72CAC /* LaunchServicesHelper.swift */; };
 		9F34AE87F938B9A1EFC9BC9E /* JunkFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F401C4BC377A2CE92A80749A /* JunkFile.swift */; };
 		A04E1C0F3B0DFDFEBE7AC8D8 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32ED12FD69904B7DA5E83B4B /* ContentView.swift */; };
 		A712C6538E8BDAC6096A9FF6 /* StatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC955835A199EFC122F91BB0 /* StatCardView.swift */; };
 		AABAA4965904F3956F1F9942 /* DonutChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3B2F4E4E268B888DFE5688D /* DonutChartView.swift */; };
 		B6435FD758244B9A4814C6AE /* SystemInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A412ABDE264EE48E6200C5A0 /* SystemInfo.swift */; };
 		BF7FC06E75A54B068057ED86 /* SmartCareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB54D52C437595F5F6EE512C /* SmartCareView.swift */; };
+		C6DA4ADEA40AB9F744A2A11E /* FileScanner+Advanced.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912C7F30340A795716F80C17 /* FileScanner+Advanced.swift */; };
 		D7092ED041F60938AA802C3D /* FileScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53704528A750D7A05DBDCBC6 /* FileScanner.swift */; };
 		DA052FA3745246162F4BDB35 /* Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 53261C60DE2F9E5CC6C3233B /* Info.plist */; };
 		FAD4FA59BA5F75400F061734 /* ModuleIdleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38F2773A5DF1C906E6F4BE54 /* ModuleIdleView.swift */; };
@@ -40,8 +43,11 @@
 		53261C60DE2F9E5CC6C3233B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		53704528A750D7A05DBDCBC6 /* FileScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileScanner.swift; sourceTree = "<group>"; };
 		6341AA4245E89FDE588A9037 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		703FFFB600E62C5920D72CAC /* LaunchServicesHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchServicesHelper.swift; sourceTree = "<group>"; };
 		790F5D1EAA3C102E7D386DEF /* ModernProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernProgressView.swift; sourceTree = "<group>"; };
+		7F1210584709BBE4340FE5D8 /* AppIntelligenceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntelligenceEngine.swift; sourceTree = "<group>"; };
 		821738A72D24C51E8F61AE08 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		912C7F30340A795716F80C17 /* FileScanner+Advanced.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FileScanner+Advanced.swift"; sourceTree = "<group>"; };
 		A3D5429E045B95040BB7FE11 /* PathConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathConstants.swift; sourceTree = "<group>"; };
 		A412ABDE264EE48E6200C5A0 /* SystemInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemInfo.swift; sourceTree = "<group>"; };
 		AC955835A199EFC122F91BB0 /* StatCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatCardView.swift; sourceTree = "<group>"; };
@@ -86,7 +92,10 @@
 		40CA2385990AF7CCD816BD50 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				7F1210584709BBE4340FE5D8 /* AppIntelligenceEngine.swift */,
 				53704528A750D7A05DBDCBC6 /* FileScanner.swift */,
+				912C7F30340A795716F80C17 /* FileScanner+Advanced.swift */,
+				703FFFB600E62C5920D72CAC /* LaunchServicesHelper.swift */,
 				A412ABDE264EE48E6200C5A0 /* SystemInfo.swift */,
 			);
 			path = Services;
@@ -205,12 +214,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				2F40E2861F2268C93E72159E /* AppBundle.swift in Sources */,
+				2B1E1B35333C5AA7F2F6670A /* AppIntelligenceEngine.swift in Sources */,
 				78830EA5B565E6BAC7DF6522 /* ByteFormatter.swift in Sources */,
 				32A40DB724B9EB97687A07DA /* CleanMacApp.swift in Sources */,
 				A04E1C0F3B0DFDFEBE7AC8D8 /* ContentView.swift in Sources */,
 				AABAA4965904F3956F1F9942 /* DonutChartView.swift in Sources */,
+				C6DA4ADEA40AB9F744A2A11E /* FileScanner+Advanced.swift in Sources */,
 				D7092ED041F60938AA802C3D /* FileScanner.swift in Sources */,
 				9F34AE87F938B9A1EFC9BC9E /* JunkFile.swift in Sources */,
+				8E1474F07CF9503BAB11698F /* LaunchServicesHelper.swift in Sources */,
 				42F257C8F8E271251A9BA37B /* ModernProgressView.swift in Sources */,
 				FAD4FA59BA5F75400F061734 /* ModuleIdleView.swift in Sources */,
 				1B93A3F376E36A4B08951177 /* OverviewView.swift in Sources */,

@@ -25,7 +25,7 @@ final class UninstallerViewModel {
             await MainActor.run { scanStage = stage; scanProgress = progress }
             try? await Task.sleep(for: .milliseconds(400))
         }
-        let scanned = await FileScanner.scanApplications()
+        let scanned = await AppIntelligenceEngine.scanAll()
         await MainActor.run { apps = scanned; isScanning = false; scanComplete = true }
     }
     
@@ -133,10 +133,14 @@ struct UninstallerResultsView: View {
             
             // Stat cards
             HStack(spacing: 12) {
-                StatCard(icon: "bolt.slash", iconColor: Color(hex: "EF4444"), label: "Not Used", value: "3", subValue: nil)
-                StatCard(icon: "square.stack.3d.up", iconColor: Color(hex: "3B82F6"), label: "Large Apps", value: "5", subValue: nil)
-                StatCard(icon: "clock.arrow.circlepath", iconColor: Color(hex: "A855F7"), label: "Older Versions", value: "2", subValue: nil)
-                StatCard(icon: "cube", iconColor: Color(hex: "22C55E"), label: "Background", value: "12", subValue: nil)
+                let unused = AppIntelligenceEngine.unusedApps(viewModel.apps)
+                let large = AppIntelligenceEngine.largeApps(viewModel.apps)
+                let bg = AppIntelligenceEngine.backgroundApps(viewModel.apps)
+                
+                StatCard(icon: "bolt.slash", iconColor: Color(hex: "EF4444"), label: "Not Used", value: "\(unused.count)", subValue: nil)
+                StatCard(icon: "square.stack.3d.up", iconColor: Color(hex: "3B82F6"), label: "Large Apps", value: "\(large.count)", subValue: nil)
+                StatCard(icon: "clock.arrow.circlepath", iconColor: Color(hex: "A855F7"), label: "32-bit", value: "\(viewModel.apps.filter { $0.is32Bit }.count)", subValue: nil)
+                StatCard(icon: "cube", iconColor: Color(hex: "22C55E"), label: "Background", value: "\(bg.count)", subValue: nil)
             }
             .padding(.horizontal, 28)
             
@@ -208,13 +212,23 @@ struct AppTableRow: View {
     @State private var isHovered = false
     
     var categoryColor: Color {
-        let colors: [Color] = [Color(hex: "3B82F6"), Color(hex: "EF4444"), Color(hex: "22C55E"), Color(hex: "F59E0B"), Color(hex: "A855F7")]
-        return colors[abs(app.name.hashValue) % colors.count]
+        switch app.category {
+        case "Developer": return Color(hex: "3B82F6")
+        case "Social": return Color(hex: "EF4444")
+        case "Media": return Color(hex: "22C55E")
+        case "Productivity": return Color(hex: "F59E0B")
+        case "Creative": return Color(hex: "A855F7")
+        case "Browser": return Color(hex: "0EA5E9")
+        case "Utilities": return Color(hex: "64748B")
+        case "Game": return Color(hex: "F97316")
+        case "Finance": return Color(hex: "14B8A6")
+        case "Security": return Color(hex: "6366F1")
+        default: return Color(hex: "94A3B8")
+        }
     }
     
     var categoryName: String {
-        let cats = ["DESIGN", "DEVELOPMENT", "SOCIAL", "PRODUCTIVITY", "MEDIA"]
-        return cats[abs(app.name.hashValue) % cats.count]
+        app.category.uppercased()
     }
     
     var body: some View {
@@ -241,7 +255,7 @@ struct AppTableRow: View {
                     Text(app.name)
                         .font(.system(size: 13, weight: .bold))
                         .foregroundColor(Color(hex: "111827"))
-                    Text("BUILD \(app.version) · UNIVERSAL")
+                    Text("BUILD \(app.version) · \(app.is32Bit ? "32-BIT" : "UNIVERSAL")")
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.5)
                         .foregroundColor(Color(hex: "9CA3AF"))
@@ -254,9 +268,9 @@ struct AppTableRow: View {
                 .foregroundColor(Color(hex: "374151"))
                 .frame(width: 100, alignment: .leading)
             
-            Text("Today")
+            Text(app.lastActiveText)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(hex: "6B7280"))
+                .foregroundColor(app.isUnused ? Color(hex: "EF4444") : Color(hex: "6B7280"))
                 .frame(width: 120, alignment: .leading)
             
             Text(categoryName)
