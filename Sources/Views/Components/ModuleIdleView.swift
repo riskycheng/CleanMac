@@ -13,43 +13,31 @@ struct ModuleIdleView: View {
         VStack(spacing: 0) {
             Spacer()
             
-            VStack(spacing: 24) {
-                // Gradient icon
+            VStack(spacing: 32) {
+                // Large squircle icon — light background, purple icon, soft shadow
                 ZStack {
-                    RoundedRectangle(cornerRadius: 28)
-                        .fill(
-                            LinearGradient(
-                                colors: [iconColor.opacity(0.15), iconColor.opacity(0.05)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 96, height: 96)
-                        .shadow(color: iconColor.opacity(0.15), radius: 20, x: 0, y: 8)
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .fill(Color.white)
+                        .frame(width: 140, height: 140)
+                        .shadow(color: Color.black.opacity(0.06), radius: 24, x: 0, y: 12)
                     
                     Image(systemName: icon)
-                        .font(.system(size: 40, weight: .medium))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [iconColor, iconColor.opacity(0.7)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .font(.system(size: 56, weight: .semibold))
+                        .foregroundColor(iconColor)
                 }
                 .scaleEffect(pulse ? 1.02 : 0.98)
                 .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: pulse)
                 
-                VStack(spacing: 10) {
+                VStack(spacing: 14) {
                     Text(title)
-                        .font(.system(size: 36, weight: .black))
+                        .font(.system(size: 42, weight: .black))
                         .foregroundColor(Color(hex: "111827"))
                     
                     Text(subtitle)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundColor(Color(hex: "6B7280"))
                         .multilineTextAlignment(.center)
-                        .lineSpacing(4)
+                        .lineSpacing(5)
                         .frame(maxWidth: 420)
                 }
                 
@@ -57,16 +45,16 @@ struct ModuleIdleView: View {
                     Text(buttonText)
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.white)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 14)
+                        .padding(.horizontal, 36)
+                        .padding(.vertical, 16)
                         .background(
-                            RoundedRectangle(cornerRadius: 24)
+                            RoundedRectangle(cornerRadius: 28)
                                 .fill(Color(hex: "1C1C1E"))
                         )
                         .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 4)
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 8)
+                .padding(.top, 4)
             }
             
             Spacer()

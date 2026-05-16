@@ -17,6 +17,7 @@ final class OverviewViewModel {
 struct OverviewView: View {
     let onLaunchSmartCare: () -> Void
     @State private var viewModel = OverviewViewModel()
+    @State private var hoveredSegmentIndex: Int? = nil
     
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +35,8 @@ struct OverviewView: View {
                     DonutChartView(
                         segments: donutSegments(disk: disk),
                         centerTitle: "\(Int(disk.usedPercentage * 100))%",
-                        centerSubtitle: "USED"
+                        centerSubtitle: "USED",
+                        hoveredIndex: $hoveredSegmentIndex
                     )
                     .frame(width: 360, height: 360)
                 }
@@ -103,19 +105,19 @@ struct OverviewView: View {
                     HStack(spacing: 3) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(hex: "3B82F6"))
-                            .frame(width: max(4, geo.size.width * 0.55))
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color(hex: "E5E7EB"))
-                            .frame(width: max(4, geo.size.width * 0.15))
+                            .frame(width: max(4, geo.size.width * 0.55))   // Media & Files — blue
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(hex: "F472B6"))
-                            .frame(width: max(4, geo.size.width * 0.08))
+                            .frame(width: max(4, geo.size.width * 0.15))   // Applications — pink
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(hex: "A78BFA"))
-                            .frame(width: max(4, geo.size.width * 0.05))
+                            .frame(width: max(4, geo.size.width * 0.08))   // System Junk — purple
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(hex: "E5E7EB"))
-                            .frame(width: max(4, geo.size.width * 0.17))
+                            .frame(width: max(4, geo.size.width * 0.05))   // Other — gray
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(hex: "E5E7EB"))
+                            .frame(width: max(4, geo.size.width * 0.17))   // Free Space — gray
                     }
                     .frame(height: 8)
                 }
@@ -124,10 +126,10 @@ struct OverviewView: View {
             
             // Category list
             VStack(spacing: 8) {
-                StorageRow(icon: "doc", iconBg: Color(hex: "EFF6FF"), iconColor: Color(hex: "3B82F6"), label: "Media & Files", value: "342 GB")
-                StorageRow(icon: "app", iconBg: Color(hex: "FDF2F8"), iconColor: Color(hex: "F472B6"), label: "Applications", value: "85 GB")
-                StorageRow(icon: "trash", iconBg: Color(hex: "F5F3FF"), iconColor: Color(hex: "A78BFA"), label: "System Junk", value: "12.4 GB")
-                StorageRow(icon: "externaldrive", iconBg: Color(hex: "F3F4F6"), iconColor: Color(hex: "9CA3AF"), label: "Free Space", value: "145.6 GB")
+                StorageRow(icon: "doc", iconBg: Color(hex: "EFF6FF"), iconColor: Color(hex: "3B82F6"), label: "Media & Files", value: "342 GB", isHighlighted: hoveredSegmentIndex == 0, segmentIndex: 0, onHoverSegment: { hoveredSegmentIndex = $0 })
+                StorageRow(icon: "app", iconBg: Color(hex: "FDF2F8"), iconColor: Color(hex: "F472B6"), label: "Applications", value: "85 GB", isHighlighted: hoveredSegmentIndex == 1, segmentIndex: 1, onHoverSegment: { hoveredSegmentIndex = $0 })
+                StorageRow(icon: "trash", iconBg: Color(hex: "F5F3FF"), iconColor: Color(hex: "A78BFA"), label: "System Junk", value: "12.4 GB", isHighlighted: hoveredSegmentIndex == 2, segmentIndex: 2, onHoverSegment: { hoveredSegmentIndex = $0 })
+                StorageRow(icon: "externaldrive", iconBg: Color(hex: "F3F4F6"), iconColor: Color(hex: "9CA3AF"), label: "Free Space", value: "145.6 GB", isHighlighted: hoveredSegmentIndex == 3, segmentIndex: 3, onHoverSegment: { hoveredSegmentIndex = $0 })
             }
         }
     }
@@ -174,10 +176,10 @@ struct OverviewView: View {
     
     private func donutSegments(disk: SystemInfo.DiskInfo) -> [DonutSegment] {
         [
-            DonutSegment(color: Color(hex: "3B82F6"), percentage: 0.55, label: "Media"),
-            DonutSegment(color: Color(hex: "E5E7EB"), percentage: 0.15, label: "Apps"),
-            DonutSegment(color: Color(hex: "F472B6"), percentage: 0.08, label: "Junk"),
-            DonutSegment(color: Color(hex: "A78BFA"), percentage: 0.05, label: "Other"),
+            DonutSegment(color: Color(hex: "3B82F6"), percentage: 0.55, label: "Media"),      // blue → Media & Files
+            DonutSegment(color: Color(hex: "F472B6"), percentage: 0.15, label: "Apps"),      // pink → Applications
+            DonutSegment(color: Color(hex: "A78BFA"), percentage: 0.08, label: "Junk"),      // purple → System Junk
+            DonutSegment(color: Color(hex: "E5E7EB"), percentage: 0.05, label: "Other"),     // gray → Free Space / Other
         ]
     }
 }
@@ -188,23 +190,26 @@ struct StorageRow: View {
     let iconColor: Color
     let label: String
     let value: String
+    var isHighlighted: Bool = false
+    var segmentIndex: Int = 0
+    var onHoverSegment: ((Int?) -> Void)? = nil
     
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(iconBg)
+                    .fill(isHighlighted ? iconColor.opacity(0.18) : iconBg)
                     .frame(width: 36, height: 36)
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(iconColor)
+                    .foregroundColor(isHighlighted ? iconColor.opacity(0.9) : iconColor)
             }
             
             VStack(alignment: .leading, spacing: 2) {
                 Text(label.uppercased())
                     .font(.system(size: 9, weight: .bold))
                     .tracking(1)
-                    .foregroundColor(Color(hex: "9CA3AF"))
+                    .foregroundColor(isHighlighted ? iconColor.opacity(0.7) : Color(hex: "9CA3AF"))
                 Text(value)
                     .font(.system(size: 16, weight: .black))
                     .foregroundColor(Color(hex: "111827"))
@@ -214,18 +219,25 @@ struct StorageRow: View {
             
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color(hex: "D1D5DB"))
+                .foregroundColor(isHighlighted ? iconColor.opacity(0.4) : Color(hex: "D1D5DB"))
         }
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.03), radius: 10, x: 0, y: 3)
+                .fill(isHighlighted ? iconColor.opacity(0.06) : Color.white)
+                .shadow(color: isHighlighted ? iconColor.opacity(0.2) : Color.black.opacity(0.03), radius: isHighlighted ? 20 : 10, x: 0, y: isHighlighted ? 8 : 3)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.black.opacity(0.03), lineWidth: 1)
+                .stroke(isHighlighted ? iconColor.opacity(0.3) : Color.black.opacity(0.03), lineWidth: isHighlighted ? 1.5 : 1)
         )
+        .scaleEffect(isHighlighted ? 1.025 : 1.0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isHighlighted)
+        .onHover { hovering in
+            if let callback = onHoverSegment {
+                callback(hovering ? segmentIndex : nil)
+            }
+        }
     }
 }
 

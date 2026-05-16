@@ -131,11 +131,96 @@ final class SmartCareViewModel {
     }
 }
 
+struct SmartCareBackgroundView: View {
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                // Large curved shape top-right
+                Path { path in
+                    let w = geo.size.width
+                    let h = geo.size.height
+                    path.move(to: CGPoint(x: w * 0.5, y: 0))
+                    path.addCurve(
+                        to: CGPoint(x: w, y: h * 0.45),
+                        control1: CGPoint(x: w * 0.85, y: h * 0.05),
+                        control2: CGPoint(x: w * 1.05, y: h * 0.25)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.6, y: h * 0.7),
+                        control1: CGPoint(x: w * 0.95, y: h * 0.6),
+                        control2: CGPoint(x: w * 0.75, y: h * 0.8)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.35, y: h * 0.35),
+                        control1: CGPoint(x: w * 0.45, y: h * 0.6),
+                        control2: CGPoint(x: w * 0.25, y: h * 0.5)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.5, y: 0),
+                        control1: CGPoint(x: w * 0.45, y: h * 0.2),
+                        control2: CGPoint(x: w * 0.55, y: h * 0.05)
+                    )
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.7),
+                            Color.white.opacity(0.2)
+                        ],
+                        startPoint: .topTrailing,
+                        endPoint: .bottomLeading
+                    )
+                )
+                
+                // Secondary curved shape bottom-right
+                Path { path in
+                    let w = geo.size.width
+                    let h = geo.size.height
+                    path.move(to: CGPoint(x: w * 0.4, y: h))
+                    path.addCurve(
+                        to: CGPoint(x: w, y: h * 0.65),
+                        control1: CGPoint(x: w * 0.7, y: h * 0.95),
+                        control2: CGPoint(x: w * 0.95, y: h * 0.8)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.75, y: h * 0.4),
+                        control1: CGPoint(x: w * 0.95, y: h * 0.5),
+                        control2: CGPoint(x: w * 0.85, y: h * 0.35)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.55, y: h * 0.55),
+                        control1: CGPoint(x: w * 0.65, y: h * 0.45),
+                        control2: CGPoint(x: w * 0.5, y: h * 0.5)
+                    )
+                    path.addCurve(
+                        to: CGPoint(x: w * 0.4, y: h),
+                        control1: CGPoint(x: w * 0.6, y: h * 0.75),
+                        control2: CGPoint(x: w * 0.45, y: h * 0.9)
+                    )
+                }
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1)
+                        ],
+                        startPoint: .bottomTrailing,
+                        endPoint: .topLeading
+                    )
+                )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
 struct SmartCareView: View {
     @State private var viewModel = SmartCareViewModel()
     
     var body: some View {
         ZStack {
+            SmartCareBackgroundView()
+            
             switch viewModel.state {
             case .idle:
                 ModuleIdleView(
