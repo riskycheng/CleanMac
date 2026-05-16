@@ -41,9 +41,24 @@ xcodegen generate && xcodebuild -project CleanMac.xcodeproj -scheme CleanMac -de
 - Concurrency: ViewModels are `@MainActor @Observable`; models are `@unchecked Sendable`
 - Scan cap: 5,000 items per location
 
-## Current State (Post Phase 2)
+## Current State (Post Phase 2 + Smart Care Polish)
 - Advanced scanning algorithms implemented with real usage data
 - Junk files scored by age × size × category × orphan weight
 - App bundles get real categories, last-used dates, 32-bit/background/AppStore flags
 - Orphaned support files detected via LaunchServices bundle ID cross-reference
 - `knowledgeC.db` read dynamically for real app usage (with file-date fallback)
+
+### Smart Care Flow
+1. **Idle** — Large squircle icon, title, subtitle, Start button
+2. **Scanning** — Terminal window (640×220) with live logs showing actual `[Int(progress*100)%]`
+3. **Reviewing** — Three clickable category cards (System Junk / Unused Apps / Large Files) + Total Savings card
+   - Cards hover with colored border + chevron indicator
+   - Clicking a card navigates to a detail list with checkboxes
+   - Back button returns to overview; Clean button starts cleanup
+4. **Cleaning** — Progress ring with item count and space reclaimed
+5. **Complete** — Checkmark animation with stats and "Scan Again" button
+
+### Smart Care Detail Views
+- **System Junk** — All `JunkFile` items with checkbox, path, size
+- **Unused Apps** — Apps with `daysSinceUsed > 90`, checkbox, bundle ID, size, unused days
+- **Large Files** — Apps with `totalSize > 500MB`, sorted by size descending
